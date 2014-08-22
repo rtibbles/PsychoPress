@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, request
 from werkzeug import SharedDataMiddleware
 import os
+import json
  
 PROJECT_ROOT = os.path.dirname(os.path.realpath(__file__))
  
@@ -36,7 +37,7 @@ def merge(master, update):
 
 @app.route("/api/experimentdatahandlers", methods=["GET"])
 def experiment_data_get_coll():
-    return jsonify(experimentdata.values())
+    return json.dumps(experimentdata.values())
 
 @app.route("/api/experimentdatahandlers/<id>", methods=["GET"])
 def experiment_data_get(id=None):
