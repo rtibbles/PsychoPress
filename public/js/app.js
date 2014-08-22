@@ -226,7 +226,7 @@ module.exports = {
 
 ;require.register("models/Block", function(exports, require, module) {
 'use strict';
-var Base, Collection, Model, ParameterSet, Trial, TrialObject, _ref, _ref1,
+var Base, BlockParameterSet, Collection, Model, Trial, TrialObject, _ref, _ref1,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
@@ -236,7 +236,7 @@ Trial = require('./Trial');
 
 TrialObject = require('./TrialObject');
 
-ParameterSet = require('./ParameterSet');
+BlockParameterSet = require('./BlockParameterSet');
 
 Model = (function(_super) {
   __extends(Model, _super);
@@ -256,7 +256,7 @@ Model = (function(_super) {
     trialObjects: []
   };
 
-  Model.prototype.trialProperties = ["title", "width", "height", "timeout"];
+  Model.prototype.trialProperties = ["title", "width", "height", "timeout", "triggers"];
 
   Model.prototype.relations = [
     {
@@ -270,7 +270,7 @@ Model = (function(_super) {
     }, {
       type: Backbone.One,
       key: 'parameterSet',
-      relatedModel: ParameterSet.Model
+      relatedModel: BlockParameterSet.Model
     }
   ];
 
@@ -293,6 +293,10 @@ Model = (function(_super) {
       attributes["trialObjects"] = this.get("trialObjects");
     }
     return attributes;
+  };
+
+  Model.prototype.createTrialObject = function(options) {
+    return this.get("trialObjects").create(options);
   };
 
   return Model;
@@ -373,6 +377,136 @@ module.exports = {
 };
 });
 
+;require.register("models/BlockParameterSet", function(exports, require, module) {
+'use strict';
+var Base, Collection, Model, Parameter, Random, _ref, _ref1,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+Base = require('./Base');
+
+Random = require('utils/random');
+
+Parameter = require('./Parameter');
+
+Model = (function(_super) {
+  __extends(Model, _super);
+
+  function Model() {
+    _ref = Model.__super__.constructor.apply(this, arguments);
+    return _ref;
+  }
+
+  Model.prototype.defaults = {
+    randomized: false,
+    trialParameters: [],
+    blockParameters: []
+  };
+
+  Model.prototype.relations = [
+    {
+      type: Backbone.Many,
+      key: 'trialParameters',
+      collectionType: Parameter.Collection
+    }, {
+      type: Backbone.Many,
+      key: 'blockParameters',
+      collectionType: Parameter.Collection
+    }
+  ];
+
+  Model.prototype.returnTrialParameters = function(trials_wanted, experimentParameterSet) {
+    var blockParameterSet, i, key, min_length, model, parameter, parameterList, parameterNameList, parameterObjectList, parameterSet, parameters, value, _i, _j, _k, _l, _len, _len1, _m, _ref1, _ref2;
+    if (trials_wanted == null) {
+      trials_wanted = null;
+    }
+    if (experimentParameterSet == null) {
+      experimentParameterSet = {};
+    }
+    parameterObjectList = [];
+    parameterNameList = [];
+    blockParameterSet = {};
+    _ref1 = this.get("blockParameters").models;
+    for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+      model = _ref1[_i];
+      blockParameterSet[model.get("parameterName")] = Random.seeded_shuffle(model.returnParameterList(null, experimentParameterSet), "TODO - insert a reference to participant ID here!")[0];
+    }
+    parameterSet = {};
+    _ref2 = this.get("trialParameters").models;
+    for (_j = 0, _len1 = _ref2.length; _j < _len1; _j++) {
+      model = _ref2[_j];
+      parameterList = model.returnParameterList(trials_wanted, blockParameterSet);
+      parameterSet[model.get("parameterName")] = parameterList;
+      min_length = Math.min(min_length, parameterList.length) || parameterList.length;
+    }
+    for (key in parameterSet) {
+      value = parameterSet[key];
+      if (value.length < trials_wanted) {
+        console.warn("Parameter " + key + " could not produce sufficient\ntrials for desired trials_wanted value.");
+      }
+      parameterSet[key] = value.slice(0, min_length);
+      parameterNameList.push(key);
+    }
+    for (key in experimentParameterSet) {
+      value = experimentParameterSet[key];
+      parameterList = [];
+      for (i = _k = 0; 0 <= min_length ? _k < min_length : _k > min_length; i = 0 <= min_length ? ++_k : --_k) {
+        parameterList.push(value);
+      }
+      parameterSet[key] = parameterList;
+      parameterNameList.push(key);
+    }
+    for (key in blockParameterSet) {
+      value = blockParameterSet[key];
+      parameterList = [];
+      for (i = _l = 0; 0 <= min_length ? _l < min_length : _l > min_length; i = 0 <= min_length ? ++_l : --_l) {
+        parameterList.push(value);
+      }
+      parameterSet[key] = parameterList;
+      parameterNameList.push(key);
+    }
+    for (i = _m = 0; 0 <= min_length ? _m < min_length : _m > min_length; i = 0 <= min_length ? ++_m : --_m) {
+      parameters = _.object(parameterNameList, (function() {
+        var _len2, _n, _results;
+        _results = [];
+        for (_n = 0, _len2 = parameterNameList.length; _n < _len2; _n++) {
+          parameter = parameterNameList[_n];
+          _results.push(parameterSet[parameter][i]);
+        }
+        return _results;
+      })());
+      parameterObjectList.push(parameters);
+    }
+    if (this.get("randomized")) {
+      parameterObjectList = Random.seeded_shuffle(parameterSet, "TODO - insert a reference to participant ID here!");
+    }
+    return [min_length, parameterObjectList];
+  };
+
+  return Model;
+
+})(Base.Model);
+
+Collection = (function(_super) {
+  __extends(Collection, _super);
+
+  function Collection() {
+    _ref1 = Collection.__super__.constructor.apply(this, arguments);
+    return _ref1;
+  }
+
+  Collection.prototype.model = Model;
+
+  return Collection;
+
+})(Base.Collection);
+
+module.exports = {
+  Model: Model,
+  Collection: Collection
+};
+});
+
 ;require.register("models/Experiment", function(exports, require, module) {
 'use strict';
 var Base, Block, Collection, Model, _ref, _ref1,
@@ -404,6 +538,10 @@ Model = (function(_super) {
       collectionType: Block.Collection
     }
   ];
+
+  Model.prototype.createBlock = function(options) {
+    return this.get("blocks").create(options);
+  };
 
   return Model;
 
@@ -453,7 +591,8 @@ Model = (function(_super) {
   }
 
   Model.prototype.initialize = function() {
-    return this.lastSync = 0;
+    this.lastSync = 0;
+    return this.serverState = this.toJSON();
   };
 
   Model.prototype.defaults = {
@@ -487,7 +626,7 @@ Model = (function(_super) {
   Model.prototype.syncNow = function(method, model, options) {
     var e,
       _this = this;
-    if (!_.isEmpty(this.serverState)) {
+    if (!this.isNew()) {
       options.attrs = Diff.Diff(this.serverState, model.toJSON());
       options.method = 'patch';
       options.success = function(saved) {
@@ -606,7 +745,7 @@ module.exports = {
 };
 });
 
-;require.register("models/ParameterSet", function(exports, require, module) {
+;require.register("models/Parameter", function(exports, require, module) {
 'use strict';
 var Base, Collection, Model, Random, _ref, _ref1,
   __hasProp = {}.hasOwnProperty,
@@ -625,81 +764,123 @@ Model = (function(_super) {
   }
 
   /*
-  Parameters can be of three basic types:
-  fixedList   equivalent to a CSV or spreadsheet of parameters.
-              Each attribute has an equal length array of values
-              which will be assigned based on the index.
-  randomList  each parameter can take on one of a set of discrete
-              values, ParameterSet will return all possible combinations,
-              or a pseudorandom subset up to a max number. Subset will be
-              seeded by participant id so will be deterministic on refresh.
-  generatorFn Parameters are defined by mathematical functions. Requires
-              input value for functions (either single value or array of
-              same length as number of parameters), function to change input
-              values by (either single function or array of functions), and
-              number of trials wanted.
+  Parameter attributes can be of three basic returnTypes:
+  
+  fixedList       equivalent to a CSV or spreadsheet of parameters.
+                  Each attribute defined in this way has an equal
+                  length array of values which must be greater than
+                  or equal to the requested number of trials.
+  
+  generatedList   each parameter can take on one of a set of discrete
+                  values, ParameterSet will either return a repeating
+                  set (either randomized or not), or can be combined
+                  with other parameters to produce all possible
+                  combinations.
+  
+  generatorFn     Parameters are defined by mathematical functions. Requires
+                  input value for functions (either single value or array of
+                  same length as number of parameters), function to change
+                  input values by (either single function or array of
+                  functions), and number of trials wanted.
+  
+  Further, Parameter Attributes can have additional methods based on their
+  dataType, for example, an Array dataType is allowed to be shuffled.
   */
 
 
   Model.prototype.defaults = {
-    type: "fixedList",
-    randomized: false
+    dataType: "",
+    returnType: "fixedList",
+    randomized: false,
+    parameterName: "Untitled Parameter",
+    parameters: [],
+    parameterizedAttributes: {}
   };
 
-  Model.prototype.returnTrialParameters = function(trials_wanted) {
+  Model.prototype.returnParameterList = function(trials_wanted, injectedParameters) {
+    var attribute, data, name, _ref1;
     if (trials_wanted == null) {
       trials_wanted = null;
     }
-    switch (this.get("type")) {
-      case "fixedList":
-        return this.fixedList(trials_wanted);
-      case "randomList":
-        return this.randomList(trials_wanted);
-      case "generatorFn":
-        return this.generatorFn(trials_wanted);
-      default:
-        return console.log("ParameterSet type undefined!");
+    if (injectedParameters == null) {
+      injectedParameters = {};
     }
+    _ref1 = this.get("parameterizedAttributes");
+    for (attribute in _ref1) {
+      name = _ref1[attribute];
+      if (name in injectedParameters) {
+        console.log("Injecting!");
+        this.set(attribute, injectedParameters[name]);
+        console.log(this.get(attribute));
+      }
+    }
+    switch (this.get("returnType")) {
+      case "fixedList":
+        data = this.fixedList(trials_wanted);
+        break;
+      case "generatedList":
+        data = this.generatedList(trials_wanted);
+        break;
+      case "generatorFn":
+        data = this.generatorFn(trials_wanted);
+        break;
+      default:
+        console.log("ParameterSet returnType undefined!");
+    }
+    if (this.get("dataType") === "array") {
+      if (this.get("shuffled")) {
+        data = this.shuffleListArrays(data);
+      }
+    }
+    return data;
   };
 
   Model.prototype.fixedList = function(trials_wanted) {
-    var i, key, length, parameter, parameterList, parameterSet, parameters, value, _i, _ref1;
-    length = 0;
-    parameterSet = [];
-    parameterList = [];
-    _ref1 = this.get("parameters");
-    for (key in _ref1) {
-      value = _ref1[key];
-      parameterList.push(key);
-      length = value.length;
-    }
-    for (i = _i = 0; 0 <= length ? _i < length : _i > length; i = 0 <= length ? ++_i : --_i) {
-      parameters = _.object(parameterList, (function() {
-        var _j, _len, _results;
-        _results = [];
-        for (_j = 0, _len = parameterList.length; _j < _len; _j++) {
-          parameter = parameterList[_j];
-          _results.push(this.get("parameters")[parameter][i]);
-        }
-        return _results;
-      }).call(this));
-      parameterSet.push(parameters);
+    var parameterList;
+    parameterList = this.get("parameters");
+    if (parameterList.length < trials_wanted) {
+      console.warn("Trials wanted exceeds fixedList length");
     }
     if (this.get("randomized")) {
-      parameterSet = Random.seeded_shuffle(parameterSet, "TODO - insert a reference to participant ID here!");
+      parameterList = Random.seeded_shuffle(parameterList, "TODO - insert a reference to participant ID here!");
     }
     if (trials_wanted != null) {
-      parameterSet = parameterSet.slice(0, trials_wanted);
+      parameterList = parameterList.slice(0, trials_wanted);
     }
-    return [length, parameterSet];
+    return parameterList;
   };
 
-  Model.prototype.randomList = function(trials_wanted) {
-    return {};
+  Model.prototype.generatedList = function(trials_wanted) {
+    var extra_count, extras, i, parameterList, wholelists, _i;
+    parameterList = [];
+    wholelists = Math.floor(trials_wanted / this.get("parameters").length);
+    extra_count = trials_wanted % this.get("parameters").length;
+    for (i = _i = 0; 0 <= wholelists ? _i < wholelists : _i > wholelists; i = 0 <= wholelists ? ++_i : --_i) {
+      parameterList.push.apply(parameterList, this.get("parameters"));
+    }
+    if (this.get("randomized")) {
+      extras = Random.seeded_shuffle(this.get("parameters"), "TODO - insert a reference to participant ID here!");
+      extras = extras.slice(0, extra_count);
+      parameterList.push.apply(parameterList, extras);
+      parameterList = Random.seeded_shuffle(parameterList, "TODO - insert a reference to participant ID here!");
+    } else {
+      parameterList.push.apply(parameterList, this.get("parameters").slice(0, extra_count));
+    }
+    return parameterList;
   };
 
   Model.prototype.generatorFn = function(trials_wanted) {
     return {};
+  };
+
+  Model.prototype.shuffleListArrays = function(list) {
+    var index, item, _i, _len;
+    console.log(list);
+    for (index = _i = 0, _len = list.length; _i < _len; index = ++_i) {
+      item = list[index];
+      list[index] = Random.seeded_shuffle(item, "TODO - insert a reference to participant ID here!" + index);
+    }
+    return list;
   };
 
   return Model;
@@ -925,6 +1106,7 @@ Model = (function(_super) {
     return {
       delay: 0,
       duration: 5000,
+      startWithTrial: true,
       parameterizedAttributes: {},
       /*
       Triggers are objects of the form -
@@ -946,7 +1128,9 @@ Model = (function(_super) {
     _ref2 = this.get("parameterizedAttributes");
     for (attribute in _ref2) {
       parameterName = _ref2[attribute];
-      attributes[attribute] = parameters[parameterName];
+      if (parameterName in parameters) {
+        attributes[attribute] = parameters[parameterName];
+      }
     }
     return attributes;
   };
@@ -1019,6 +1203,88 @@ module.exports = {
 };
 });
 
+;require.register("models/TrialObjects/GroupTrialObject", function(exports, require, module) {
+'use strict';
+/*
+The group trial object acts as a special wrapper around
+other trial objects to group behaviour or properties in
+a privileged way.
+
+One example might be for the randomization of buttons
+across or participants or across trials. Two buttons would
+be part of a group, and have their labels determined at
+the button level - allowing their ordering to be
+paramiterized.
+
+As such, parameterizedAttributes on group object is
+always ignored, and any arrays passed in as parameters
+are assumed to be parameters for the children.
+*/
+
+var Model, TrialObject, _ref,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+TrialObject = require("../TrialObject");
+
+Model = (function(_super) {
+  __extends(Model, _super);
+
+  function Model() {
+    _ref = Model.__super__.constructor.apply(this, arguments);
+    return _ref;
+  }
+
+  Model.prototype.defaults = function() {
+    return _.extend({
+      trialObjects: []
+    }, Model.__super__.defaults.apply(this, arguments));
+  };
+
+  Model.prototype.relations = [
+    {
+      type: Backbone.Many,
+      key: 'trialObjects',
+      collectionType: TrialObject.Collection
+    }
+  ];
+
+  Model.prototype.parameterizedTrial = function(parameters) {
+    var attributes, index, key, localParameters, model, trialObjects, value, _i, _len, _ref1;
+    attributes = Model.__super__.parameterizedTrial.call(this);
+    trialObjects = [];
+    _ref1 = attributes.trialObjects.models;
+    for (index = _i = 0, _len = _ref1.length; _i < _len; index = ++_i) {
+      model = _ref1[index];
+      localParameters = {};
+      for (key in parameters) {
+        value = parameters[key];
+        if (value instanceof Array) {
+          localParameters[key] = value[index];
+        } else {
+          localParameters[key] = value;
+        }
+      }
+      trialObjects.push(model.parameterizedTrial(localParameters));
+    }
+    attributes.trialObjects = trialObjects;
+    return attributes;
+  };
+
+  Model.prototype.createTrialObject = function(options) {
+    return this.get("trialObjects").create(options);
+  };
+
+  return Model;
+
+})(TrialObject.Model);
+
+module.exports = {
+  Model: Model,
+  Type: "group"
+};
+});
+
 ;require.register("models/TrialObjects/KeyboardTrialObject", function(exports, require, module) {
 'use strict';
 var Keys, Model, TrialObject, _ref,
@@ -1040,7 +1306,7 @@ Model = (function(_super) {
   Model.prototype.defaults = function() {
     return _.extend({
       keys: _.keys(Keys.Keys)
-    });
+    }, Model.__super__.defaults.apply(this, arguments));
   };
 
   return Model;
@@ -1050,6 +1316,82 @@ Model = (function(_super) {
 module.exports = {
   Model: Model,
   Type: "keyboard"
+};
+});
+
+;require.register("models/TrialObjects/Visual/CircleVisualTrialObject", function(exports, require, module) {
+'use strict';
+var Model, VisualTrialObject, _ref,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+VisualTrialObject = require("../VisualTrialObject");
+
+Model = (function(_super) {
+  __extends(Model, _super);
+
+  function Model() {
+    _ref = Model.__super__.constructor.apply(this, arguments);
+    return _ref;
+  }
+
+  Model.prototype.objectOptions = function() {
+    return Model.__super__.objectOptions.call(this).concat([
+      {
+        name: "radius",
+        "default": 24,
+        type: "number"
+      }
+    ]);
+  };
+
+  return Model;
+
+})(VisualTrialObject.Model);
+
+module.exports = {
+  Model: Model,
+  Type: "circle"
+};
+});
+
+;require.register("models/TrialObjects/Visual/EllipseVisualTrialObject", function(exports, require, module) {
+'use strict';
+var Model, VisualTrialObject, _ref,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+VisualTrialObject = require("../VisualTrialObject");
+
+Model = (function(_super) {
+  __extends(Model, _super);
+
+  function Model() {
+    _ref = Model.__super__.constructor.apply(this, arguments);
+    return _ref;
+  }
+
+  Model.prototype.objectOptions = function() {
+    return Model.__super__.objectOptions.call(this).concat([
+      {
+        name: "ry",
+        "default": 24,
+        type: "number"
+      }, {
+        name: "ry",
+        "default": 24,
+        type: "number"
+      }
+    ]);
+  };
+
+  return Model;
+
+})(VisualTrialObject.Model);
+
+module.exports = {
+  Model: Model,
+  Type: "ellipse"
 };
 });
 
@@ -1069,6 +1411,17 @@ Model = (function(_super) {
     return _ref;
   }
 
+  Model.prototype.requiredParameters = function() {
+    return [
+      {
+        name: "file",
+        "default": "",
+        type: "file",
+        extensions: ["png", "jpg", "gif"]
+      }
+    ];
+  };
+
   Model.prototype.name = function() {
     return this.get("name") || this.get("file");
   };
@@ -1080,6 +1433,133 @@ Model = (function(_super) {
 module.exports = {
   Model: Model,
   Type: "image"
+};
+});
+
+;require.register("models/TrialObjects/Visual/PolygonVisualTrialObject", function(exports, require, module) {
+'use strict';
+var Model, VisualTrialObject, _ref,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+VisualTrialObject = require("../VisualTrialObject");
+
+Model = (function(_super) {
+  __extends(Model, _super);
+
+  function Model() {
+    _ref = Model.__super__.constructor.apply(this, arguments);
+    return _ref;
+  }
+
+  Model.prototype.requiredParameters = function() {
+    return [
+      {
+        name: "points",
+        "default": [],
+        type: "array"
+      }, embedded - {
+        type: fabric.Point
+      }
+    ];
+  };
+
+  return Model;
+
+})(VisualTrialObject.Model);
+
+module.exports = {
+  Model: Model,
+  Type: "polygon"
+};
+});
+
+;require.register("models/TrialObjects/Visual/RectangleVisualTrialObject", function(exports, require, module) {
+'use strict';
+var Model, VisualTrialObject, _ref,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+VisualTrialObject = require("../VisualTrialObject");
+
+Model = (function(_super) {
+  __extends(Model, _super);
+
+  function Model() {
+    _ref = Model.__super__.constructor.apply(this, arguments);
+    return _ref;
+  }
+
+  Model.prototype.objectOptions = function() {
+    return Model.__super__.objectOptions.call(this).concat([
+      {
+        name: "rx",
+        "default": 1,
+        type: "number"
+      }, {
+        name: "ry",
+        "default": 1,
+        type: "number"
+      }
+    ]);
+  };
+
+  return Model;
+
+})(VisualTrialObject.Model);
+
+module.exports = {
+  Model: Model,
+  Type: "rectangle"
+};
+});
+
+;require.register("models/TrialObjects/Visual/Text/MultiLineTextVisualTrialObject", function(exports, require, module) {
+'use strict';
+var Model, TextVisualTrialObject, _ref,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+TextVisualTrialObject = require("../TextVisualTrialObject");
+
+Model = (function(_super) {
+  __extends(Model, _super);
+
+  function Model() {
+    _ref = Model.__super__.constructor.apply(this, arguments);
+    return _ref;
+  }
+
+  Model.prototype.objectOptions = function() {
+    return Model.__super__.objectOptions.call(this).concat([
+      {
+        name: "maxWidth",
+        "default": 100,
+        type: "number"
+      }, {
+        name: "maxHeight",
+        "default": 100,
+        type: "number"
+      }, {
+        name: "justify",
+        "default": "left",
+        type: "options",
+        options: ["left", "right", "center"]
+      }
+    ]);
+  };
+
+  Model.prototype.name = function() {
+    return this.get("name") || this.get("text");
+  };
+
+  return Model;
+
+})(TextVisualTrialObject.Model);
+
+module.exports = {
+  Model: Model,
+  Type: "textbox"
 };
 });
 
@@ -1099,13 +1579,36 @@ Model = (function(_super) {
     return _ref;
   }
 
-  Model.prototype.defaults = function() {
-    return _.extend({
-      text: "hello",
-      fontSize: 24,
-      fontFamily: "arial",
-      fontStyle: "normal"
-    }, Model.__super__.defaults.apply(this, arguments));
+  Model.prototype.requiredParameters = function() {
+    return [
+      {
+        name: "text",
+        "default": "",
+        type: "string"
+      }
+    ];
+  };
+
+  Model.prototype.objectOptions = function() {
+    return Model.__super__.objectOptions.call(this).concat([
+      {
+        name: "fontSize",
+        "default": 24,
+        type: "number"
+      }, {
+        name: "fontFamily",
+        "default": "arial",
+        type: "string"
+      }, {
+        name: "fontStyle",
+        "default": "normal",
+        type: "string"
+      }, {
+        name: "backgroundColor",
+        "default": "",
+        type: "hex-colour"
+      }
+    ]);
   };
 
   Model.prototype.name = function() {
@@ -1119,6 +1622,32 @@ Model = (function(_super) {
 module.exports = {
   Model: Model,
   Type: "text"
+};
+});
+
+;require.register("models/TrialObjects/Visual/TriangleVisualTrialObject", function(exports, require, module) {
+'use strict';
+var Model, VisualTrialObject, _ref,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+VisualTrialObject = require("../VisualTrialObject");
+
+Model = (function(_super) {
+  __extends(Model, _super);
+
+  function Model() {
+    _ref = Model.__super__.constructor.apply(this, arguments);
+    return _ref;
+  }
+
+  return Model;
+
+})(VisualTrialObject.Model);
+
+module.exports = {
+  Model: Model,
+  Type: "triangle"
 };
 });
 
@@ -1139,17 +1668,104 @@ Model = (function(_super) {
   }
 
   Model.prototype.defaults = function() {
-    return _.extend({
-      angle: 0,
-      fill: "#000000",
-      height: 0,
-      left: 0,
-      opacity: 1,
-      originX: "center",
-      originY: "center",
-      top: 0,
-      width: 0
-    }, Model.__super__.defaults.apply(this, arguments));
+    var defaults, option, parameter, _i, _j, _len, _len1, _ref1, _ref2;
+    defaults = {};
+    _ref1 = this.objectOptions();
+    for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+      option = _ref1[_i];
+      if (option["default"] != null) {
+        defaults[option.name] = option["default"];
+      }
+    }
+    _ref2 = this.requiredParameters();
+    for (_j = 0, _len1 = _ref2.length; _j < _len1; _j++) {
+      parameter = _ref2[_j];
+      defaults[parameter.name] = parameter["default"];
+    }
+    return _.extend(defaults, Model.__super__.defaults.apply(this, arguments));
+  };
+
+  Model.prototype.requiredParameters = function() {
+    return [];
+  };
+
+  Model.prototype.objectOptions = function() {
+    return [
+      {
+        name: "angle",
+        "default": 0,
+        type: "number"
+      }, {
+        name: "fill",
+        "default": "#000000",
+        type: "hex-colour"
+      }, {
+        name: "height",
+        type: "number"
+      }, {
+        name: "left",
+        "default": 0,
+        type: "number"
+      }, {
+        name: "opacity",
+        "default": 1,
+        type: "number"
+      }, {
+        name: "originX",
+        "default": "center",
+        type: "options",
+        options: ["center", "left", "right"]
+      }, {
+        name: "originY",
+        "default": "center",
+        type: "options",
+        options: ["center", "left", "right"]
+      }, {
+        name: "top",
+        "default": 0,
+        type: "number"
+      }, {
+        name: "width",
+        type: "number"
+      }
+    ];
+  };
+
+  Model.prototype.returnRequired = function() {
+    var parameter, required, _i, _len, _ref1;
+    required = [];
+    _ref1 = this.requiredParameters();
+    for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+      parameter = _ref1[_i];
+      required.push(this.get(parameter.name));
+    }
+    return required;
+  };
+
+  Model.prototype.returnOptions = function() {
+    var option, options, _i, _len, _ref1;
+    options = {};
+    _ref1 = this.objectOptions();
+    for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+      option = _ref1[_i];
+      if (this.get(option.name) != null) {
+        options[option.name] = this.get(option.name);
+      }
+    }
+    return options;
+  };
+
+  Model.prototype.allParameters = function() {
+    var parameter, parameters, _i, _len, _ref1;
+    parameters = {};
+    _ref1 = this.objectOptions().concat(this.requiredParameters());
+    for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+      parameter = _ref1[_i];
+      if (this.get(parameter.name) != null) {
+        parameters[parameter.name] = this.get(parameter.name);
+      }
+    }
+    return parameters;
   };
 
   return Model;
@@ -1597,14 +2213,87 @@ module.exports = {
 };
 });
 
+;require.register("utils/fingerprint", function(exports, require, module) {
+/*
+ * Checks if a font is available to be used on a web page.
+ *
+ * @param {String} fontName The name of the font to check
+ * @return {Boolean}
+ * @license MIT
+ * @copyright Sam Clarke 2013
+ * @author Sam Clarke <sam@samclarke.com>
+*/
+
+var body, calculateWidth, container, containerCss, fingerprint, fontList, isFontAvailable, monoWidth, sansWidth, serifWidth;
+
+body = document.body;
+
+container = document.createElement('div');
+
+containerCss = ['position:absolute', 'width:auto', 'font-size:128px', 'left:-99999px'];
+
+container.innerHTML = '<span style="' + containerCss.join(' !important;') + '">' + Array(100).join('wi') + '</span>';
+
+container = container.firstChild;
+
+calculateWidth = function(fontFamily) {
+  var width;
+  container.style.fontFamily = fontFamily;
+  body.appendChild(container);
+  width = container.clientWidth;
+  body.removeChild(container);
+  return width;
+};
+
+monoWidth = calculateWidth('monospace');
+
+serifWidth = calculateWidth('serif');
+
+sansWidth = calculateWidth('sans-serif');
+
+isFontAvailable = function(fontName) {
+  return monoWidth !== calculateWidth(fontName + ',monospace') || sansWidth !== calculateWidth(fontName + ',sans-serif') || serifWidth !== calculateWidth(fontName + ',serif');
+};
+
+fontList = ["Adobe Jenson", "Adobe Text", "Albertus", "Aldus", "Alexandria", "Algerian", "American Typewriter", "Antiqua", "Arno", "Aster", "Aurora", "News 706", "Baskerville", "Bebas", "Bebas Neue", "Bell", "Bembo", "Bembo Schoolbook", "Berkeley Old Style", "Bernhard Modern", "Bodoni", "Bauer Bodoni", "Book Antiqua", "Bookman", "Bordeaux Roman", "Bulmer", "Caledonia", "Californian FB", "Calisto MT", "Cambria", "Capitals", "Cartier", "Caslon", "Wyld", "Caslon Antique", "Fifteenth Century", "Catull", "Centaur", "Century Old Style", "Century Schoolbook", "New Century Schoolbook", "Century Schoolbook Infant", "Chaparral", "Charis SIL", "Charter", "Cheltenham", "Clearface", "Cochin", "Colonna", "Computer Modern", "Concrete Roman", "Constantia", "Cooper Black", "Corona", "News 705", "DejaVu Serif", "Didot", "Droid Serif", "Ecotype", "Elephant", "Emerson", "Espy Serif", "Excelsior", "News 702", "Fairfield", "FF Scala", "Footlight", "FreeSerif", "Friz Quadrata", "Garamond", "Gentium", "Georgia", "Gloucester", "Goudy Old Style", "Goudy", "Goudy Pro Font", "Goudy Schoolbook", "Granjon", "Heather", "Hercules", "High Tower Text", "Hiroshige", "Hoefler Text", "Humana Serif", "Imprint", "Ionic No. 5", "News 701", "ITC Benguiat", "Janson", "Jenson", "Joanna", "Korinna", "Kursivschrift", "Legacy Serif", "Lexicon", "Liberation Serif", "Linux Libertine", "Literaturnaya", "Lucida Bright", "Melior", "Memphis", "Miller", "Minion", "Modern", "Mona Lisa", "Mrs Eaves", "MS Serif", "New York", "Nimbus Roman", "NPS Rawlinson Roadway", "OCR A Extended", "Palatino", "Perpetua", "Plantin", "Plantin Schoolbook", "Playbill", "Poor Richard", "Renault", "Requiem", "Roman", "Rotis Serif", "Sabon", "Seagull", "Sistina", "Souvenir", "STIX", "Stone Informal", "Stone Serif", "Sylfaen", "Times New Roman", "Times", "Trajan", "Trinité", "Trump Mediaeval", "Utopia", "Vale Type", "Vera Serif", "Versailles", "Wanted", "Weiss", "Wide Latin", "Windsor", "XITS", "Apex", "Archer", "Athens", "Cholla Slab", "City", "Clarendon", "Courier", "Egyptienne", "Guardian Egyptian", "Lexia", "Museo Slab", "Nilland", "Rockwell", "Skeleton Antique", "Tower", "Abadi", "Agency FB", "Akzidenz-Grotesk", "Andalé Sans", "Aptifer", "Arial", "Arial Unicode MS", "Avant Garde Gothic", "Avenir", "Bank Gothic", "Barmeno", "Bauhaus", "Bell Centennial", "Bell Gothic", "Benguiat Gothic", "Berlin Sans", "Beteckna", "Blue Highway", "Brandon Grotesque", "Cabin", "Cafeteria", "Calibri", "Casey", "Century Gothic", "Charcoal", "Chicago", "Clearface Gothic", "Clearview", "Co Headline", "Co Text", "Compacta", "Corbel", "DejaVu Sans", "Dotum", "Droid Sans", "Dyslexie", "Ecofont", "Eras", "Espy Sans", "Nu Sans", "Eurocrat", "Eurostile", "Square 721", "FF Dax", "FF Meta", "FF Scala Sans", "Flama", "Formata", "Franklin Gothic", "FreeSans", "Frutiger", "Frutiger Next", "Futura", "Geneva", "Gill Sans", "Gill Sans Schoolbook", "Gotham", "Haettenschweiler", "Handel Gothic", "Denmark", "Hei", "Helvetica", "Helvetica Neue", "Swiss 721", "Highway Gothic", "Hiroshige Sans", "Hobo", "Impact", "Industria", "Interstate", "Johnston/New Johnston", "Kabel", "Lato", "ITC Legacy Sans", "Lexia Readable", "Liberation Sans", "Lucida Sans", "Meiryo", "Microgramma", "Motorway", "MS Sans Serif", "Museo Sans", "Myriad", "Neutraface", "Neuzeit S", "News Gothic", "Nimbus Sans L", "Nina", "Open Sans", "Optima", "Parisine", "Pricedown", "Prima Sans", "PT Sans", "Rail Alphabet", "Revue", "Roboto", "Rotis Sans", "Segoe UI", "Skia", "Souvenir Gothic", "ITC Stone Sans", "Syntax", "Tahoma", "Template Gothic", "Thesis Sans", "Tiresias", "Trade Gothic", "Transport", "Trebuchet MS", "Trump Gothic", "Twentieth Century", "Ubuntu", "Univers", "Zurich", "Vera Sans", "Verdana", "Virtue", "Amsterdam Old Style", "Divona", "Nyala", "Portobello", "Rotis Semi Serif", "Tema Cantante", "Andale Mono", "Anonymous and Anonymous Pro", "Arial Monospaced", "BatangChe", "Bitstream Vera", "Consolas", "CourierHP", "Courier New", "CourierPS", "Fontcraft Courier", "DejaVu Sans Mono", "Droid Sans Mono", "Everson Mono", "Fedra Mono", "Fixed", "Fixedsys", "Fixedsys Excelsior", "HyperFont", "Inconsolata", "KaiTi", "Letter Gothic", "Liberation Mono", "Lucida Console", "Lucida Sans Typewriter", "Lucida Typewriter", "Menlo", "MICR", "Miriam Fixed", "Monaco", "Monofur", "Monospace", "MS Gothic", "MS Mincho", "Nimbus Mono L", "OCR-A", "OCR-B", "Orator", "Ormaxx", "PragmataPro", "Prestige Elite", "ProFont", "Proggy programming fonts", "SimHei", "SimSun", "Small Fonts", "Sydnie", "Terminal", "Tex Gyre Cursor", "Trixie", "Ubuntu Mono", "UM Typewriter", "Vera Sans Mono", "William Monospace", "Balloon", "Brush Script", "Choc", "Dom Casual", "Dragonwick", "Mistral", "Papyrus", "Segoe Script", "Tempus Sans", "Amazone", "American Scribe", "AMS Euler", "Apple Chancery", "Aquiline", "Aristocrat", "Bickley Script", "Civitype", "Codex", "Edwardian Script", "Forte", "French Script", "ITC Zapf Chancery", "Kuenstler Script", "Monotype Corsiva", "Old English Text MT", "Palace Script", "Park Avenue", "Scriptina", "Shelley Volante", "Vivaldi", "Vladimir Script", "Zapfino", "Andy", "Ashley Script", "Cézanne", "Chalkboard", "Comic Sans MS", "Fontoon", "Irregularis", "Jefferson", "Kristen", "Lucida Handwriting", "Rage Italic", "Rufscript", "Scribble", "Soupbone", "Tekton", "Alecko", "Cinderella", "Coronet", "Cupola", "Curlz", "Magnificat", "Script", "American Text", "Bastard", "Breitkopf Fraktur", "Cloister Black", "Fette Fraktur", "Fletcher", "Fraktur", "Goudy Text", "Lucida Blackletter", "Old English Text", "Schwabacher", "Wedding Text", "Aegyptus", "Aharoni", "Aisha", "Amienne", "Batak Script", "Chandas", "Grecs du roi", "Hanacaraka", "Japanese Gothic", "Jomolhari", "Kochi", "Koren", "Lontara Script", "Maiola", "Malgun Gothic", "Microsoft JhengHei", "Microsoft YaHei", "Minchō", "Ming", "Mona", "Nassim", "Nastaliq Navees", "Neacademia", "Perpetua Greek", "Porson", "Skolar", "Skolar Devanagari", "Sundanese Unicode", "Sutturah", "Tai Le Valentinium", "Tengwar", "Tibetan Machine Uni", "Tunga", "Wadalab", "Wilson Greek", "Alphabetum", "Batang", "Gungsuh", "Bitstream Cyberbit", "ClearlyU", "Code2000", "Code2001", "Code2002", "DejaVu fonts", "Doulos SIL", "Fallback font", "Free UCS Outline Fonts", "FreeFont", "GNU Unifont", "Georgia Ref", "Gulim", "New Gulim", "Junicode", "LastResort", "Lucida Grande", "Lucida Sans Unicode", "Nimbus Sans Global", "Squarish Sans CT v0.10", "Symbola", "Titus Cyberbit Basic", "Verdana Ref", "Y.OzFontN", "Apple Symbols", "Asana-Math", "Blackboard bold", "Bookshelf Symbol 7", "Braille", "Cambria Math", "Commercial Pi", "Corel", "Erler Dingbats", "HM Phonetic", "Lucida Math", "Marlett", "Mathematical Pi", "Morse Code", "OpenSymbol", "RichStyle", "Symbol", "SymbolPS", "Webdings", "Wingdings", "Wingdings 2", "Wingdings 3", "Zapf Dingbats", "Abracadabra", "Ad Lib", "Allegro", "Andreas", "Arnold Böcklin", "Astur", "Balloon Pop Outlaw Black", "Banco", "Beat", "Braggadocio", "Broadway", "Ellington", "Exablock", "Exocet", "FIG Script", "Gabriola", "Gigi", "Harlow Solid", "Harrington", "Horizon", "Jim Crow", "Jokerman", "Juice", "Lo-Type", "Magneto", "Megadeth", "Neuland", "Peignot", "Ravie", "San Francisco", "Showcard Gothic", "Snap", "Stencil", "Umbra", "Westminster", "Willow", "Bagel", "Lithos", "Talmud", "3x3", "Compatil", "Generis", "Grasset", "LED", "Luxi", "System"];
+
+module.exports = fingerprint = function() {
+  var font, key, value;
+  return window.navigator.userAgent + window.navigator.cookieEnabled + ((function() {
+    var _ref, _results;
+    _ref = window.navigator.plugins;
+    _results = [];
+    for (key in _ref) {
+      value = _ref[key];
+      _results.push(value.name);
+    }
+    return _results;
+  })()).join(",") + window.screen.height + window.screen.width + window.screen.colorDepth + ((function() {
+    var _i, _len, _results;
+    _results = [];
+    for (_i = 0, _len = fontList.length; _i < _len; _i++) {
+      font = fontList[_i];
+      if (isFontAvailable(font)) {
+        _results.push(font);
+      }
+    }
+    return _results;
+  })()).join(",");
+};
+});
+
 ;require.register("utils/keys", function(exports, require, module) {
-var keys;
+var delete_text, dummy, keys, keysToText;
 
 keys = {
   "backspace": 8,
   "tab": 9,
   "enter": 13,
+  "shift": 16,
+  "ctrl": 17,
+  "alt": 18,
   "escape": 27,
+  "space": 32,
   "page_up": 33,
   "page_down": 34,
   "end": 35,
@@ -1688,8 +2377,63 @@ keys = {
   "'": 222
 };
 
+delete_text = function(text) {
+  return text.slice(0, -1);
+};
+
+dummy = function(text) {
+  return text;
+};
+
+keysToText = {
+  "backspace": delete_text,
+  "tab": "\t",
+  "enter": "\n",
+  "delete": delete_text,
+  "space": " ",
+  "shift": dummy,
+  "ctrl": dummy,
+  "alt": dummy,
+  "escape": dummy,
+  "page_up": dummy,
+  "page_down": dummy,
+  "end": dummy,
+  "home": dummy,
+  "insert": dummy,
+  "numpad0": dummy,
+  "numpad1": dummy,
+  "numpad2": dummy,
+  "numpad3": dummy,
+  "numpad4": dummy,
+  "numpad5": dummy,
+  "numpad6": dummy,
+  "numpad7": dummy,
+  "numpad8": dummy,
+  "numpad9": dummy,
+  "numpad*": dummy,
+  "numpad+": dummy,
+  "numpad-": dummy,
+  "numpad.": dummy,
+  "numpad/": dummy,
+  "f1": dummy,
+  "f2": dummy,
+  "f3": dummy,
+  "f4": dummy,
+  "f5": dummy,
+  "f6": dummy,
+  "f7": dummy,
+  "f8": dummy,
+  "f9": dummy,
+  "f10": dummy,
+  "f11": dummy,
+  "f12": dummy,
+  "num_lock": dummy,
+  "scroll_lock": dummy
+};
+
 module.exports = {
-  Keys: keys
+  Keys: keys,
+  KeysToText: keysToText
 };
 });
 
@@ -1751,6 +2495,24 @@ seeded_shuffle = function(source_array, seed) {
 
 module.exports = {
   seeded_shuffle: seeded_shuffle
+};
+});
+
+;require.register("utils/stringHash", function(exports, require, module) {
+var stringHash;
+
+module.exports = stringHash = function(string) {
+  var chr, hash, i, _i, _ref;
+  hash = 0;
+  if (string.length === 0) {
+    return hash;
+  }
+  for (i = _i = 0, _ref = string.length; 0 <= _ref ? _i < _ref : _i > _ref; i = 0 <= _ref ? ++_i : --_i) {
+    chr = string.charCodeAt(i);
+    hash = ((hash << 5) - hash) + chr;
+    hash |= 0;
+  }
+  return hash;
 };
 });
 
@@ -1861,7 +2623,7 @@ module.exports = BlockView = (function(_super) {
 
 ;require.register("views/ExperimentView", function(exports, require, module) {
 'use strict';
-var Experiment, ExperimentDataHandler, ExperimentView, ProgressBarView, Template, View, clock, _ref,
+var Experiment, ExperimentDataHandler, ExperimentView, ProgressBarView, Template, View, clock, fingerprint, stringHash, _ref,
   __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
@@ -1877,6 +2639,10 @@ ExperimentDataHandler = require('../models/ExperimentDataHandler');
 Template = require('templates/experiment');
 
 ProgressBarView = require('./ProgressBarView');
+
+stringHash = require('utils/stringHash');
+
+fingerprint = require('utils/fingerprint');
 
 module.exports = ExperimentView = (function(_super) {
   __extends(ExperimentView, _super);
@@ -1895,13 +2661,15 @@ module.exports = ExperimentView = (function(_super) {
   ExperimentView.prototype.initialize = function() {
     var _this = this;
     ExperimentView.__super__.initialize.apply(this, arguments);
+    console.log(fingerprint());
+    this.user_id = stringHash("testing!");
     this.clock = new clock.Clock();
     this.refreshTime();
     this.render();
     this.appendTo("#app");
     this.datacollection = new ExperimentDataHandler.Collection;
     return this.datacollection.fetch().then(function() {
-      _this.datamodel = _this.datacollection.getOrCreateParticipantModel(1, _this.model.get("saveInterval"));
+      _this.datamodel = _this.datacollection.getOrCreateParticipantModel(2, _this.model.get("saveInterval"));
       _this.instantiateSubViews("blocks", "BlockView");
       return _this.preLoadExperiment();
     });
@@ -2127,7 +2895,11 @@ module.exports = TrialObjectView = (function(_super) {
     if (!this.active) {
       this.trigger("activated");
       this.logEvent("activated");
-      return this.active = true;
+      this.active = true;
+      this.listenTo(this.model, "change", this.render);
+      if (this.model.get("duration")) {
+        return this.clock.delayedTrigger(this.model.get("duration"), this, this.deactivate);
+      }
     }
   };
 
@@ -2135,19 +2907,17 @@ module.exports = TrialObjectView = (function(_super) {
     if (this.active) {
       this.trigger("deactivated");
       this.logEvent("deactivated");
-      return this.active = false;
+      this.active = false;
+      return this.stopListening(this.model, "change", this.render);
     }
-  };
-
-  TrialObjectView.prototype.modelSet = function(attr, value) {
-    return this.model.set(attr, value);
   };
 
   TrialObjectView.prototype.registerEvents = function(siblingViews) {
     var trigger, view, _i, _len, _ref1, _results,
       _this = this;
-    this.clock.delayedTrigger(this.model.get("delay"), this, this.activate);
-    this.clock.delayedTrigger(this.model.get("delay") + this.model.get("duration"), this, this.deactivate);
+    if (this.model.get("startWithTrial")) {
+      this.clock.delayedTrigger(this.model.get("delay"), this, this.activate);
+    }
     _ref1 = this.model.get("triggers") || [];
     _results = [];
     for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
@@ -2155,9 +2925,9 @@ module.exports = TrialObjectView = (function(_super) {
       view = _.find(siblingViews, function(sibling) {
         return sibling.name === trigger.objectName;
       });
-      _results.push(this.listenTo(view, trigger.eventName, function() {
+      _results.push(this.listenTo(view, trigger.eventName, function(options) {
         console.log("Triggering", trigger.eventName);
-        return _this[trigger.callback](trigger["arguments"] || {});
+        return _this[trigger.callback](_.extend(options, trigger["arguments"] || {}));
       }));
     }
     return _results;
@@ -2207,10 +2977,99 @@ module.exports = AudioTrialObjectView = (function(_super) {
   };
 
   AudioTrialObjectView.prototype.render = function() {
-    return this.object = createjs.Sound.createInstance(this.object_id);
+    if (!this.object) {
+      return this.object = createjs.Sound.createInstance(this.object_id);
+    }
   };
 
   return AudioTrialObjectView;
+
+})(TrialObjectView);
+});
+
+;require.register("views/TrialObjectViews/GroupTrialObjectView", function(exports, require, module) {
+'use strict';
+var GroupTrialObjectView, TrialObjectView, _ref,
+  __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+TrialObjectView = require('../TrialObjectView');
+
+module.exports = GroupTrialObjectView = (function(_super) {
+  __extends(GroupTrialObjectView, _super);
+
+  function GroupTrialObjectView() {
+    this.preLoadTrialObject = __bind(this.preLoadTrialObject, this);
+    this.initialize = __bind(this.initialize, this);
+    _ref = GroupTrialObjectView.__super__.constructor.apply(this, arguments);
+    return _ref;
+  }
+
+  GroupTrialObjectView.prototype.initialize = function(options) {
+    GroupTrialObjectView.__super__.initialize.apply(this, arguments);
+    this.instantiateSubViews("trialObjects", "TrialObjectView", this.trialObjectViewType);
+    return this.registerSubViewSubViews();
+  };
+
+  GroupTrialObjectView.prototype.preLoadTrialObject = function(queue) {
+    var view, _i, _len, _ref1, _results;
+    _ref1 = this.subViewList;
+    _results = [];
+    for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+      view = _ref1[_i];
+      _results.push(view.preLoadTrialObject(queue));
+    }
+    return _results;
+  };
+
+  GroupTrialObjectView.prototype.attach = function(endpoints) {
+    var view, _i, _len, _ref1, _results;
+    _ref1 = this.subViewList;
+    _results = [];
+    for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+      view = _ref1[_i];
+      _results.push(view.attach(endpoints));
+    }
+    return _results;
+  };
+
+  GroupTrialObjectView.prototype.activate = function() {
+    var view, _i, _len, _ref1;
+    _ref1 = this.subViewList;
+    for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+      view = _ref1[_i];
+      view.activate();
+    }
+    return GroupTrialObjectView.__super__.activate.call(this);
+  };
+
+  GroupTrialObjectView.prototype.deactivate = function() {
+    var view, _i, _len, _ref1;
+    _ref1 = this.subViewList;
+    for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+      view = _ref1[_i];
+      view.deactivate();
+    }
+    return GroupTrialObjectView.__super__.deactivate.call(this);
+  };
+
+  GroupTrialObjectView.prototype.render = function() {};
+
+  GroupTrialObjectView.prototype.trialObjectViewType = function(model) {
+    var elementType, elementView, error;
+    elementType = model.get("subModelTypeAttribute") || PsychoCoffee.trialObjectTypeKeys[model.get("type")];
+    elementView = elementType + "View";
+    try {
+      PsychoCoffee[elementView];
+      return elementView;
+    } catch (_error) {
+      error = _error;
+      return console.debug(error, "Unknown element type " + elementType);
+    }
+  };
+
+  return GroupTrialObjectView;
 
 })(TrialObjectView);
 });
@@ -2257,10 +3116,15 @@ module.exports = KeyboardTrialObjectView = (function(_super) {
   };
 
   KeyboardTrialObjectView.prototype.keyPressed = function(event) {
+    var key;
     if (_.has(this.keyCodeCache, event.keyCode)) {
-      this.trigger("keypress");
+      key = this.keyCodeCache[event.keyCode];
+      this.trigger("keypress", {
+        key: key,
+        shiftKey: event.shiftKey
+      });
       return this.logEvent("keypress", {
-        key: this.keyCodeCache[event.keyCode]
+        key: key
       });
     }
   };
@@ -2270,6 +3134,52 @@ module.exports = KeyboardTrialObjectView = (function(_super) {
   return KeyboardTrialObjectView;
 
 })(TrialObjectView);
+});
+
+;require.register("views/TrialObjectViews/Visual/CircleVisualTrialObjectView", function(exports, require, module) {
+'use strict';
+var CircleVisualTrialObjectView, VisualTrialObjectView, _ref,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+VisualTrialObjectView = require('../VisualTrialObjectView');
+
+module.exports = CircleVisualTrialObjectView = (function(_super) {
+  __extends(CircleVisualTrialObjectView, _super);
+
+  function CircleVisualTrialObjectView() {
+    _ref = CircleVisualTrialObjectView.__super__.constructor.apply(this, arguments);
+    return _ref;
+  }
+
+  CircleVisualTrialObjectView.prototype.object_type = fabric.Circle;
+
+  return CircleVisualTrialObjectView;
+
+})(VisualTrialObjectView);
+});
+
+;require.register("views/TrialObjectViews/Visual/EllipseVisualTrialObjectView", function(exports, require, module) {
+'use strict';
+var EllipseVisualTrialObjectView, VisualTrialObjectView, _ref,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+VisualTrialObjectView = require('../VisualTrialObjectView');
+
+module.exports = EllipseVisualTrialObjectView = (function(_super) {
+  __extends(EllipseVisualTrialObjectView, _super);
+
+  function EllipseVisualTrialObjectView() {
+    _ref = EllipseVisualTrialObjectView.__super__.constructor.apply(this, arguments);
+    return _ref;
+  }
+
+  EllipseVisualTrialObjectView.prototype.object_type = fabric.Ellipse;
+
+  return EllipseVisualTrialObjectView;
+
+})(VisualTrialObjectView);
 });
 
 ;require.register("views/TrialObjectViews/Visual/ImageVisualTrialObjectView", function(exports, require, module) {
@@ -2289,7 +3199,10 @@ module.exports = ImageVisualTrialObjectView = (function(_super) {
   }
 
   ImageVisualTrialObjectView.prototype.render = function() {
-    return this.object = new fabric.Image(this.file_object);
+    if (!this.object) {
+      this.object = new fabric.Image(this.file_object, this.model.returnOptions());
+    }
+    return ImageVisualTrialObjectView.__super__.render.apply(this, arguments);
   };
 
   return ImageVisualTrialObjectView;
@@ -2297,13 +3210,68 @@ module.exports = ImageVisualTrialObjectView = (function(_super) {
 })(VisualTrialObjectView);
 });
 
-;require.register("views/TrialObjectViews/Visual/TextVisualTrialObjectView", function(exports, require, module) {
+;require.register("views/TrialObjectViews/Visual/PolygonVisualTrialObjectView", function(exports, require, module) {
 'use strict';
-var TextVisualTrialObjectView, VisualTrialObjectView, _ref,
+var PolygonVisualTrialObjectView, VisualTrialObjectView, _ref,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 VisualTrialObjectView = require('../VisualTrialObjectView');
+
+module.exports = PolygonVisualTrialObjectView = (function(_super) {
+  __extends(PolygonVisualTrialObjectView, _super);
+
+  function PolygonVisualTrialObjectView() {
+    _ref = PolygonVisualTrialObjectView.__super__.constructor.apply(this, arguments);
+    return _ref;
+  }
+
+  PolygonVisualTrialObjectView.prototype.object_type = fabric.Polygon;
+
+  PolygonVisualTrialObjectView.prototype.render = function() {
+    if (!this.object) {
+      this.object = new this.object_type(this.model.returnRequired()[0], this.model.returnOptions());
+    }
+    return PolygonVisualTrialObjectView.__super__.render.apply(this, arguments);
+  };
+
+  return PolygonVisualTrialObjectView;
+
+})(VisualTrialObjectView);
+});
+
+;require.register("views/TrialObjectViews/Visual/RectangleVisualTrialObjectView", function(exports, require, module) {
+'use strict';
+var RectangleVisualTrialObjectView, VisualTrialObjectView, _ref,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+VisualTrialObjectView = require('../VisualTrialObjectView');
+
+module.exports = RectangleVisualTrialObjectView = (function(_super) {
+  __extends(RectangleVisualTrialObjectView, _super);
+
+  function RectangleVisualTrialObjectView() {
+    _ref = RectangleVisualTrialObjectView.__super__.constructor.apply(this, arguments);
+    return _ref;
+  }
+
+  RectangleVisualTrialObjectView.prototype.object_type = fabric.Rect;
+
+  return RectangleVisualTrialObjectView;
+
+})(VisualTrialObjectView);
+});
+
+;require.register("views/TrialObjectViews/Visual/TextVisualTrialObjectView", function(exports, require, module) {
+'use strict';
+var Keys, TextVisualTrialObjectView, VisualTrialObjectView, _ref,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+VisualTrialObjectView = require('../VisualTrialObjectView');
+
+Keys = require("utils/keys");
 
 module.exports = TextVisualTrialObjectView = (function(_super) {
   __extends(TextVisualTrialObjectView, _super);
@@ -2313,11 +3281,57 @@ module.exports = TextVisualTrialObjectView = (function(_super) {
     return _ref;
   }
 
+  TextVisualTrialObjectView.prototype.object_type = fabric.Text;
+
   TextVisualTrialObjectView.prototype.render = function() {
-    return this.object = new fabric.Text(this.model.get("text"));
+    if (!this.object) {
+      this.object = new this.object_type(this.model.returnRequired()[0], this.model.returnOptions());
+    }
+    return TextVisualTrialObjectView.__super__.render.apply(this, arguments);
+  };
+
+  TextVisualTrialObjectView.prototype.addText = function(options) {
+    var text;
+    if ("text" in options) {
+      text = options.text;
+    } else if ("key" in options) {
+      text = Keys.KeysToText[options.key] || options.key;
+      if (typeof text === "string" && options.shiftKey) {
+        console.log("True");
+        text = text.toUpperCase();
+      }
+    }
+    if (text instanceof Function) {
+      return this.model.set("text", text(this.model.get("text")));
+    } else {
+      return this.model.set("text", this.model.get("text") + text);
+    }
   };
 
   return TextVisualTrialObjectView;
+
+})(VisualTrialObjectView);
+});
+
+;require.register("views/TrialObjectViews/Visual/TriangleVisualTrialObjectView", function(exports, require, module) {
+'use strict';
+var TriangleVisualTrialObjectView, VisualTrialObjectView, _ref,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+VisualTrialObjectView = require('../VisualTrialObjectView');
+
+module.exports = TriangleVisualTrialObjectView = (function(_super) {
+  __extends(TriangleVisualTrialObjectView, _super);
+
+  function TriangleVisualTrialObjectView() {
+    _ref = TriangleVisualTrialObjectView.__super__.constructor.apply(this, arguments);
+    return _ref;
+  }
+
+  TriangleVisualTrialObjectView.prototype.object_type = fabric.Triangle;
+
+  return TriangleVisualTrialObjectView;
 
 })(VisualTrialObjectView);
 });
@@ -2345,15 +3359,32 @@ module.exports = VisualTrialObjectView = (function(_super) {
   };
 
   VisualTrialObjectView.prototype.activate = function() {
+    var _this = this;
+    this.object.hasControls = false;
+    this.object.hasBorders = false;
+    this.object.lockMovementX = this.object.lockMovementY = true;
     this.object.setVisible(true);
     this.addToClockChangeEvents("activated");
+    this.object.on("mousedown", function(event) {
+      _this.trigger("click");
+      return _this.logEvent("click");
+    });
     return VisualTrialObjectView.__super__.activate.call(this);
   };
 
   VisualTrialObjectView.prototype.deactivate = function() {
     this.object.setVisible(false);
     this.addToClockChangeEvents("deactivated");
+    this.object.off("mousedown");
     return VisualTrialObjectView.__super__.deactivate.call(this);
+  };
+
+  VisualTrialObjectView.prototype.render = function() {
+    if (!this.object) {
+      this.object = new this.object_type();
+    }
+    this.object.set(this.model.allParameters());
+    return this.addToClockChangeEvents("change");
   };
 
   return VisualTrialObjectView;
@@ -2376,6 +3407,7 @@ module.exports = TrialView = (function(_super) {
   __extends(TrialView, _super);
 
   function TrialView() {
+    this.registerEvents = __bind(this.registerEvents, this);
     this.registerTimeout = __bind(this.registerTimeout, this);
     this.logEvent = __bind(this.logEvent, this);
     this.canvasPerformanceTracking = __bind(this.canvasPerformanceTracking, this);
@@ -2391,7 +3423,7 @@ module.exports = TrialView = (function(_super) {
   TrialView.prototype.initialize = function(options) {
     TrialView.__super__.initialize.apply(this, arguments);
     this.instantiateSubViews("trialObjects", "TrialObjectView", this.trialObjectViewType);
-    return this.subViewList = _.values(this.subViews);
+    return this.registerSubViewSubViews();
   };
 
   TrialView.prototype.preLoadTrial = function(queue) {
@@ -2431,13 +3463,16 @@ module.exports = TrialView = (function(_super) {
       view.datamodel = this.datamodel;
       view.registerEvents(this.subViewList);
     }
+    this.registerEvents();
     this.registerTimeout();
     this.clock.startTimer();
     return this.logEvent("trial_start");
   };
 
   TrialView.prototype.createCanvas = function() {
-    this.canvas = new fabric.StaticCanvas("trial-canvas");
+    this.canvas = new fabric.Canvas("trial-canvas");
+    this.canvas.selection = false;
+    this.canvas.hoverCursor = 'default';
     return this.clock.canvas = this.canvas;
   };
 
@@ -2468,6 +3503,7 @@ module.exports = TrialView = (function(_super) {
 
   TrialView.prototype.endTrial = function() {
     var key, view, _ref1;
+    this.logEvent("trial_end");
     _ref1 = this.subViews;
     for (key in _ref1) {
       view = _ref1[key];
@@ -2480,6 +3516,23 @@ module.exports = TrialView = (function(_super) {
     this.stopListening();
     this.remove();
     return this.trigger("trialEnded");
+  };
+
+  TrialView.prototype.registerEvents = function() {
+    var trigger, view, _i, _len, _ref1, _results,
+      _this = this;
+    _ref1 = this.model.get("triggers") || [];
+    _results = [];
+    for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+      trigger = _ref1[_i];
+      view = _.find(this.subViews, function(subView) {
+        return subView.name === trigger.objectName;
+      });
+      _results.push(this.listenTo(view, trigger.eventName, function() {
+        return _this[trigger.callback](trigger["arguments"] || {});
+      }));
+    }
+    return _results;
   };
 
   return TrialView;
@@ -2529,21 +3582,34 @@ module.exports = View = (function(_super) {
   };
 
   View.prototype.instantiateSubViews = function(key, viewType, viewFunction) {
-    var model, _i, _len, _ref1, _results;
+    var model, _i, _len, _ref1;
     this.subViews = {};
     _ref1 = this.model.get(key).models;
-    _results = [];
     for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
       model = _ref1[_i];
       if (viewFunction) {
         viewType = viewFunction(model);
       }
-      _results.push(this.subViews[model.id] = new PsychoCoffee[viewType]({
+      this.subViews[model.id] = new PsychoCoffee[viewType]({
         model: model,
         clock: this.clock
-      }));
+      });
     }
-    return _results;
+    return this.subViewList = _.values(this.subViews);
+  };
+
+  View.prototype.registerSubViewSubViews = function() {
+    var key, subView, value, _i, _len, _ref1, _ref2;
+    _ref1 = this.subViewList;
+    for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+      subView = _ref1[_i];
+      _ref2 = subView.subViews;
+      for (key in _ref2) {
+        value = _ref2[key];
+        this.subViews[key] = value;
+      }
+    }
+    return this.subViewList = _.values(this.subViews);
   };
 
   View.prototype.afterRender = function() {};

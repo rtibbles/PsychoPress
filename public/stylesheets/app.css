@@ -562,5 +562,12 @@ body {
   box-shadow: 5px 5px 5px #121212;
 }
 
+#trial-draw {
+  text-align: center;
+}
+#trial-draw .canvas-container {
+  margin: 0 auto;
+}
+
 
 /*# sourceMappingURL=app.css.map*/
