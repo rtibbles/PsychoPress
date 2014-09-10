@@ -538,6 +538,20 @@ body {
   min-width: 600px;
 }
 
+.text-input-prompt {
+  padding-right: 3px;
+}
+
+.trial-object {
+  -moz-user-select: -moz-none;
+  -khtml-user-select: none;
+  -webkit-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  position: absolute;
+  pointer-events: auto;
+}
+
 #progressBar {
   width: 400px;
   height: 22px;
@@ -564,9 +578,14 @@ body {
 
 #trial-draw {
   text-align: center;
-}
-#trial-draw .canvas-container {
   margin: 0 auto;
+}
+#trial-draw div {
+  position: absolute !important;
+}
+#trial-draw #trial-elements {
+  z-index: 10;
+  pointer-events: none;
 }
 
 

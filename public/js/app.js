@@ -95,12 +95,7 @@ require.register("app/app", function(exports, require, module) {
 var PsychoCoffee;
 
 PsychoCoffee = {
-  initialize: function() {
-    var Router;
-    Router = require('../routes/router');
-    this.router = new Router();
-    return typeof Object.freeze === "function" ? Object.freeze(this) : void 0;
-  }
+  initialize: function() {}
 };
 
 module.exports = PsychoCoffee;
@@ -136,11 +131,10 @@ $(function() {
 
 ;require.register("models/APIBase", function(exports, require, module) {
 'use strict';
-var Base, Collection, Model, _ref, _ref1,
+var Collection, Model, _ref, _ref1,
   __hasProp = {}.hasOwnProperty,
-  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
-
-Base = require('./Base');
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; },
+  __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
 
 Model = (function(_super) {
   __extends(Model, _super);
@@ -152,25 +146,56 @@ Model = (function(_super) {
 
   return Model;
 
-})(Base.Model);
+})(Backbone.AssociatedModel);
 
 Collection = (function(_super) {
   __extends(Collection, _super);
 
   function Collection() {
+    this.url = __bind(this.url, this);
     _ref1 = Collection.__super__.constructor.apply(this, arguments);
     return _ref1;
   }
 
   Collection.prototype.urlBase = "/api/";
 
-  Collection.prototype.local = false;
-
   Collection.prototype.model = Model;
+
+  Collection.prototype.initialize = function(options) {
+    var apiFilter, filterparam, _i, _len, _ref2, _results;
+    if (options == null) {
+      options = {};
+    }
+    this.params = {};
+    _ref2 = this.apiFilters;
+    _results = [];
+    for (_i = 0, _len = _ref2.length; _i < _len; _i++) {
+      apiFilter = _ref2[_i];
+      filterparam = "filter[where][" + apiFilter + "]";
+      if (options[apiFilter] != null) {
+        _results.push(this.params[filterparam] = options[apiFilter]);
+      } else {
+        _results.push(void 0);
+      }
+    }
+    return _results;
+  };
+
+  Collection.prototype.filterFetch = function(options) {
+    if (options == null) {
+      options = {};
+    }
+    options.data = this.params;
+    return this.fetch(options);
+  };
+
+  Collection.prototype.url = function() {
+    return this.urlBase + this.apiCollection;
+  };
 
   return Collection;
 
-})(Base.Collection);
+})(Backbone.Collection);
 
 module.exports = {
   Model: Model,
@@ -180,9 +205,11 @@ module.exports = {
 
 ;require.register("models/Base", function(exports, require, module) {
 'use strict';
-var Collection, Model, _ref, _ref1,
+var Collection, Model, random, _ref, _ref1,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+random = require('utils/random');
 
 Model = (function(_super) {
   __extends(Model, _super);
@@ -194,6 +221,10 @@ Model = (function(_super) {
 
   Model.prototype.name = function() {
     return this.get("name") || this.id;
+  };
+
+  Model.prototype.save = function(key, val, options) {
+    return this.set("id", random.seededguid());
   };
 
   return Model;
@@ -253,7 +284,9 @@ Model = (function(_super) {
     height: 480,
     timeout: 1000,
     parameterSet: {},
-    trialObjects: []
+    trialObjects: [],
+    numberOfTrials: null,
+    triggers: []
   };
 
   Model.prototype.trialProperties = ["title", "width", "height", "timeout", "triggers"];
@@ -274,14 +307,14 @@ Model = (function(_super) {
     }
   ];
 
-  Model.prototype.returnParameters = function() {
-    return this.get("parameterSet").returnTrialParameters(this.get("numberOfTrials"));
+  Model.prototype.returnParameters = function(user_id, experimentParameters) {
+    return this.get("parameterSet").returnTrialParameters(user_id, this.get("numberOfTrials"), experimentParameters);
   };
 
-  Model.prototype.returnTrialProperties = function(clone) {
-    var attributes, key, _i, _len, _ref1;
-    if (clone == null) {
-      clone = false;
+  Model.prototype.returnTrialProperties = function(parameters) {
+    var attribute, attributes, key, parameterName, _i, _len, _ref1, _ref2;
+    if (parameters == null) {
+      parameters = {};
     }
     attributes = {};
     _ref1 = this.trialProperties;
@@ -289,8 +322,12 @@ Model = (function(_super) {
       key = _ref1[_i];
       attributes[key] = this.get(key);
     }
-    if (clone) {
-      attributes["trialObjects"] = this.get("trialObjects");
+    _ref2 = this.get("parameterizedAttributes");
+    for (attribute in _ref2) {
+      parameterName = _ref2[attribute];
+      if (parameterName in parameters) {
+        attributes[attribute] = parameters[parameterName];
+      }
     }
     return attributes;
   };
@@ -325,7 +362,8 @@ module.exports = {
 
 ;require.register("models/BlockDataHandler", function(exports, require, module) {
 'use strict';
-var Collection, Model, NestedAPIBase, TrialDataLog, _ref, _ref1,
+var Collection, EventLog, Model, NestedAPIBase, TrialDataLog, _ref, _ref1,
+  __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
@@ -333,16 +371,20 @@ NestedAPIBase = require('./NestedAPIBase');
 
 TrialDataLog = require('./TrialDataLog');
 
+EventLog = require('./EventLog');
+
 Model = (function(_super) {
   __extends(Model, _super);
 
   function Model() {
+    this.logEvent = __bind(this.logEvent, this);
     _ref = Model.__super__.constructor.apply(this, arguments);
     return _ref;
   }
 
   Model.prototype.defaults = {
-    trialdatalogs: []
+    trialdatalogs: [],
+    blockeventlogs: []
   };
 
   Model.prototype.relations = [
@@ -350,8 +392,26 @@ Model = (function(_super) {
       type: Backbone.Many,
       key: 'trialdatalogs',
       collectionType: TrialDataLog.Collection
+    }, {
+      type: Backbone.Many,
+      key: 'blockeventlogs',
+      collectionType: EventLog.Collection
     }
   ];
+
+  Model.prototype.logEvent = function(event_type, clock, options) {
+    if (options == null) {
+      options = {};
+    }
+    return this.addEvent(_.extend(options, {
+      experiment_time: clock.getTime(),
+      event_type: event_type
+    }));
+  };
+
+  Model.prototype.addEvent = function(event) {
+    return this.get("blockeventlogs").create(event);
+  };
 
   return Model;
 
@@ -415,8 +475,11 @@ Model = (function(_super) {
     }
   ];
 
-  Model.prototype.returnTrialParameters = function(trials_wanted, experimentParameterSet) {
+  Model.prototype.returnTrialParameters = function(user_id, trials_wanted, experimentParameterSet) {
     var blockParameterSet, i, key, min_length, model, parameter, parameterList, parameterNameList, parameterObjectList, parameterSet, parameters, value, _i, _j, _k, _l, _len, _len1, _m, _ref1, _ref2;
+    if (user_id == null) {
+      user_id = "";
+    }
     if (trials_wanted == null) {
       trials_wanted = null;
     }
@@ -429,13 +492,13 @@ Model = (function(_super) {
     _ref1 = this.get("blockParameters").models;
     for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
       model = _ref1[_i];
-      blockParameterSet[model.get("parameterName")] = Random.seeded_shuffle(model.returnParameterList(null, experimentParameterSet), "TODO - insert a reference to participant ID here!")[0];
+      blockParameterSet[model.get("parameterName")] = Random.seeded_shuffle(model.returnParameterList(user_id, null, experimentParameterSet), user_id + "blockParameterSet" + this.id)[0];
     }
     parameterSet = {};
     _ref2 = this.get("trialParameters").models;
     for (_j = 0, _len1 = _ref2.length; _j < _len1; _j++) {
       model = _ref2[_j];
-      parameterList = model.returnParameterList(trials_wanted, blockParameterSet);
+      parameterList = model.returnParameterList(user_id, trials_wanted, blockParameterSet);
       parameterSet[model.get("parameterName")] = parameterList;
       min_length = Math.min(min_length, parameterList.length) || parameterList.length;
     }
@@ -446,6 +509,9 @@ Model = (function(_super) {
       }
       parameterSet[key] = value.slice(0, min_length);
       parameterNameList.push(key);
+    }
+    if ((min_length == null) || min_length === 0) {
+      min_length = 1;
     }
     for (key in experimentParameterSet) {
       value = experimentParameterSet[key];
@@ -478,9 +544,9 @@ Model = (function(_super) {
       parameterObjectList.push(parameters);
     }
     if (this.get("randomized")) {
-      parameterObjectList = Random.seeded_shuffle(parameterSet, "TODO - insert a reference to participant ID here!");
+      parameterObjectList = Random.seeded_shuffle(parameterObjectList, user_id + "parameterObjectList" + this.id);
     }
-    return [min_length, parameterObjectList];
+    return [blockParameterSet, min_length, parameterObjectList];
   };
 
   return Model;
@@ -507,15 +573,13 @@ module.exports = {
 };
 });
 
-;require.register("models/Experiment", function(exports, require, module) {
+;require.register("models/EventLog", function(exports, require, module) {
 'use strict';
-var Base, Block, Collection, Model, _ref, _ref1,
+var Collection, Model, NestedAPIBase, _ref, _ref1,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
-Base = require('./Base');
-
-Block = require('./Block');
+NestedAPIBase = require('./NestedAPIBase');
 
 Model = (function(_super) {
   __extends(Model, _super);
@@ -525,10 +589,64 @@ Model = (function(_super) {
     return _ref;
   }
 
+  return Model;
+
+})(NestedAPIBase.Model);
+
+Collection = (function(_super) {
+  __extends(Collection, _super);
+
+  function Collection() {
+    _ref1 = Collection.__super__.constructor.apply(this, arguments);
+    return _ref1;
+  }
+
+  Collection.prototype.model = Model;
+
+  return Collection;
+
+})(NestedAPIBase.Collection);
+
+module.exports = {
+  Model: Model,
+  Collection: Collection
+};
+});
+
+;require.register("models/Experiment", function(exports, require, module) {
+'use strict';
+var Base, Block, Collection, ExperimentParameterSet, Model, fingerprint, random, _ref, _ref1,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+Base = require('./Base');
+
+Block = require('./Block');
+
+fingerprint = require('utils/fingerprint');
+
+random = require('utils/random');
+
+ExperimentParameterSet = require('./ExperimentParameterSet');
+
+Model = (function(_super) {
+  __extends(Model, _super);
+
+  function Model() {
+    _ref = Model.__super__.constructor.apply(this, arguments);
+    return _ref;
+  }
+
+  Model.prototype.initialize = function() {
+    Model.__super__.initialize.apply(this, arguments);
+    return random.seedGUID(fingerprint());
+  };
+
   Model.prototype.defaults = {
     blocks: [],
     title: "Experiment",
-    saveInterval: 10000
+    saveInterval: 10000,
+    parameterSet: {}
   };
 
   Model.prototype.relations = [
@@ -536,11 +654,19 @@ Model = (function(_super) {
       type: Backbone.Many,
       key: 'blocks',
       collectionType: Block.Collection
+    }, {
+      type: Backbone.One,
+      key: 'parameterSet',
+      relatedModel: ExperimentParameterSet.Model
     }
   ];
 
   Model.prototype.createBlock = function(options) {
     return this.get("blocks").create(options);
+  };
+
+  Model.prototype.returnParameters = function(user_id) {
+    return this.get("parameterSet").returnExperimentParameters(user_id);
   };
 
   return Model;
@@ -569,7 +695,7 @@ module.exports = {
 
 ;require.register("models/ExperimentDataHandler", function(exports, require, module) {
 'use strict';
-var APIBase, BlockDataHandler, Collection, Diff, Model, _ref, _ref1,
+var APIBase, BlockDataHandler, Collection, Diff, EventLog, Model, _ref, _ref1,
   __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
@@ -580,12 +706,15 @@ BlockDataHandler = require('./BlockDataHandler');
 
 Diff = require('utils/diff');
 
+EventLog = require('./EventLog');
+
 Model = (function(_super) {
   __extends(Model, _super);
 
   function Model() {
     this.syncNow = __bind(this.syncNow, this);
     this.sync = __bind(this.sync, this);
+    this.logEvent = __bind(this.logEvent, this);
     _ref = Model.__super__.constructor.apply(this, arguments);
     return _ref;
   }
@@ -596,7 +725,8 @@ Model = (function(_super) {
   };
 
   Model.prototype.defaults = {
-    blockdatahandlers: []
+    blockdatahandlers: [],
+    experimenteventlogs: []
   };
 
   Model.prototype.relations = [
@@ -604,50 +734,88 @@ Model = (function(_super) {
       type: Backbone.Many,
       key: 'blockdatahandlers',
       collectionType: BlockDataHandler.Collection
+    }, {
+      type: Backbone.Many,
+      key: 'experimenteventlogs',
+      collectionType: EventLog.Collection
     }
   ];
+
+  Model.prototype.logEvent = function(event_type, clock, options) {
+    if (options == null) {
+      options = {};
+    }
+    return this.addEvent(_.extend(options, {
+      experiment_time: clock.getTime(),
+      event_type: event_type
+    }));
+  };
+
+  Model.prototype.addEvent = function(event) {
+    return this.get("experimenteventlogs").create(event);
+  };
 
   Model.prototype.sync = function(method, model, options) {
     var delayTime, syncNow,
       _this = this;
-    syncNow = function() {
-      return _this.syncNow(method, model, options);
-    };
-    delayTime = this.lastSync + this.get("saveInterval") - performance.now();
-    if (delayTime <= 0) {
-      return this.syncNow();
+    if (options == null) {
+      options = {};
+    }
+    if (options.now) {
+      return this.syncNow(method, model, options);
     } else {
-      if (!this.syncCache) {
-        return this.syncCache = setTimeout(syncNow, delayTime);
+      if (model != null) {
+        syncNow = function() {
+          return _this.syncNow(method, model, options);
+        };
+        delayTime = this.lastSync + this.get("saveInterval") - performance.now();
+        if (delayTime <= 0) {
+          return this.syncNow();
+        } else {
+          if (!this.syncCache) {
+            return this.syncCache = setTimeout(syncNow, delayTime);
+          }
+        }
       }
     }
   };
 
   Model.prototype.syncNow = function(method, model, options) {
-    var e,
+    var callback, e,
       _this = this;
-    if (!this.isNew()) {
-      options.attrs = Diff.Diff(this.serverState, model.toJSON());
-      options.method = 'patch';
-      options.success = function(saved) {
-        if (saved) {
-          return _this.serverState = _this.toJSON();
-        }
-      };
-    } else {
-      options.success = function(data) {
-        _this.set(data);
-        return _this.serverState = _this.toJSON();
-      };
+    if (options == null) {
+      options = {};
     }
-    this.lastSync = performance.now();
-    clearTimeout(this.syncCache);
-    delete this.syncCache;
-    try {
-      return Backbone.sync(method, model, options);
-    } catch (_error) {
-      e = _error;
-      return console.debug(e, method, model, options);
+    if (model != null) {
+      if (options.success) {
+        callback = options.success;
+      }
+      if (!this.isNew()) {
+        options.attrs = Diff.Diff(this.serverState, model.toJSON());
+        options.method = 'patch';
+        options.success = function(saved) {
+          if (saved.patched) {
+            _this.set(model.attributes);
+            _this.serverState = model.toJSON();
+            return callback(saved);
+          }
+        };
+      } else {
+        options.success = function(data) {
+          _this.set(data);
+          _this.serverState = _this.toJSON();
+          return callback(data);
+        };
+      }
+      this.lastSync = performance.now();
+      clearTimeout(this.syncCache);
+      delete this.syncCache;
+      try {
+        return Backbone.sync(method, model, options);
+      } catch (_error) {
+        e = _error;
+        return console.debug(e, method, model, options);
+      }
     }
   };
 
@@ -659,25 +827,28 @@ Collection = (function(_super) {
   __extends(Collection, _super);
 
   function Collection() {
-    this.url = __bind(this.url, this);
     _ref1 = Collection.__super__.constructor.apply(this, arguments);
     return _ref1;
   }
 
   Collection.prototype.model = Model;
 
-  Collection.prototype.url = function() {
-    return this.urlBase + "experimentdatahandlers";
-  };
+  Collection.prototype.storeName = "experimentData";
 
-  Collection.prototype.getOrCreateParticipantModel = function(participant_id, saveInterval) {
+  Collection.prototype.apiCollection = "experimentdatahandlers";
+
+  Collection.prototype.apiFilters = ["experiment_identifier", "participant_id"];
+
+  Collection.prototype.getOrCreateParticipantModel = function(participant_id, experiment_model) {
     var model;
     model = this.findWhere({
-      participant_id: participant_id
+      participant_id: participant_id,
+      experiment_identifier: experiment_model.get("identifier")
     });
     return model || this.create({
       participant_id: participant_id,
-      saveInterval: saveInterval
+      saveInterval: experiment_model.get("saveInterval"),
+      experiment_identifier: experiment_model.get("identifier")
     });
   };
 
@@ -691,34 +862,51 @@ module.exports = {
 };
 });
 
-;require.register("models/NestedAPIBase", function(exports, require, module) {
+;require.register("models/ExperimentParameterSet", function(exports, require, module) {
 'use strict';
-var Base, Collection, Model, _ref, _ref1,
-  __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
+var Base, Collection, Model, Parameter, Random, _ref, _ref1,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 Base = require('./Base');
 
+Random = require('utils/random');
+
+Parameter = require('./Parameter');
+
 Model = (function(_super) {
   __extends(Model, _super);
 
   function Model() {
-    this.save = __bind(this.save, this);
     _ref = Model.__super__.constructor.apply(this, arguments);
     return _ref;
   }
 
-  Model.prototype.save = function() {
-    var model, _i, _len, _ref1, _results;
-    Model.__super__.save.apply(this, arguments);
-    _ref1 = this.collection.parents;
-    _results = [];
+  Model.prototype.defaults = {
+    randomized: false,
+    experimentParameters: []
+  };
+
+  Model.prototype.relations = [
+    {
+      type: Backbone.Many,
+      key: 'experimentParameters',
+      collectionType: Parameter.Collection
+    }
+  ];
+
+  Model.prototype.returnExperimentParameters = function(user_id) {
+    var experimentParameterSet, model, _i, _len, _ref1;
+    if (user_id == null) {
+      user_id = "";
+    }
+    experimentParameterSet = {};
+    _ref1 = this.get("experimentParameters").models;
     for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
       model = _ref1[_i];
-      _results.push(model.save());
+      experimentParameterSet[model.get("parameterName")] = Random.seeded_shuffle(model.returnParameterList(user_id, null, experimentParameterSet), user_id + "experimentParameterSet" + this.id)[0];
     }
-    return _results;
+    return experimentParameterSet;
   };
 
   return Model;
@@ -738,6 +926,60 @@ Collection = (function(_super) {
   return Collection;
 
 })(Base.Collection);
+
+module.exports = {
+  Model: Model,
+  Collection: Collection
+};
+});
+
+;require.register("models/NestedAPIBase", function(exports, require, module) {
+'use strict';
+var Collection, Model, hashObject, _ref, _ref1,
+  __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+hashObject = require('utils/hashObject');
+
+Model = (function(_super) {
+  __extends(Model, _super);
+
+  function Model() {
+    this.save = __bind(this.save, this);
+    _ref = Model.__super__.constructor.apply(this, arguments);
+    return _ref;
+  }
+
+  Model.prototype.save = function() {
+    var model, _i, _len, _ref1, _results;
+    this.set("id", hashObject(this.collection.parents[0].toJSON()));
+    _ref1 = this.collection.parents;
+    _results = [];
+    for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+      model = _ref1[_i];
+      _results.push(model.save());
+    }
+    return _results;
+  };
+
+  return Model;
+
+})(Backbone.AssociatedModel);
+
+Collection = (function(_super) {
+  __extends(Collection, _super);
+
+  function Collection() {
+    _ref1 = Collection.__super__.constructor.apply(this, arguments);
+    return _ref1;
+  }
+
+  Collection.prototype.model = Model;
+
+  return Collection;
+
+})(Backbone.Collection);
 
 module.exports = {
   Model: Model,
@@ -797,8 +1039,11 @@ Model = (function(_super) {
     parameterizedAttributes: {}
   };
 
-  Model.prototype.returnParameterList = function(trials_wanted, injectedParameters) {
+  Model.prototype.returnParameterList = function(user_id, trials_wanted, injectedParameters) {
     var attribute, data, name, _ref1;
+    if (user_id == null) {
+      user_id = "";
+    }
     if (trials_wanted == null) {
       trials_wanted = null;
     }
@@ -809,40 +1054,38 @@ Model = (function(_super) {
     for (attribute in _ref1) {
       name = _ref1[attribute];
       if (name in injectedParameters) {
-        console.log("Injecting!");
         this.set(attribute, injectedParameters[name]);
-        console.log(this.get(attribute));
       }
     }
     switch (this.get("returnType")) {
       case "fixedList":
-        data = this.fixedList(trials_wanted);
+        data = this.fixedList(user_id, trials_wanted);
         break;
       case "generatedList":
-        data = this.generatedList(trials_wanted);
+        data = this.generatedList(user_id, trials_wanted);
         break;
       case "generatorFn":
-        data = this.generatorFn(trials_wanted);
+        data = this.generatorFn(user_id, trials_wanted);
         break;
       default:
         console.log("ParameterSet returnType undefined!");
     }
     if (this.get("dataType") === "array") {
       if (this.get("shuffled")) {
-        data = this.shuffleListArrays(data);
+        data = this.shuffleListArrays(user_id, data);
       }
     }
     return data;
   };
 
-  Model.prototype.fixedList = function(trials_wanted) {
+  Model.prototype.fixedList = function(user_id, trials_wanted) {
     var parameterList;
     parameterList = this.get("parameters");
     if (parameterList.length < trials_wanted) {
       console.warn("Trials wanted exceeds fixedList length");
     }
     if (this.get("randomized")) {
-      parameterList = Random.seeded_shuffle(parameterList, "TODO - insert a reference to participant ID here!");
+      parameterList = Random.seeded_shuffle(parameterList, user_id + "fixedList" + this.id);
     }
     if (trials_wanted != null) {
       parameterList = parameterList.slice(0, trials_wanted);
@@ -850,7 +1093,7 @@ Model = (function(_super) {
     return parameterList;
   };
 
-  Model.prototype.generatedList = function(trials_wanted) {
+  Model.prototype.generatedList = function(user_id, trials_wanted) {
     var extra_count, extras, i, parameterList, wholelists, _i;
     parameterList = [];
     wholelists = Math.floor(trials_wanted / this.get("parameters").length);
@@ -859,26 +1102,25 @@ Model = (function(_super) {
       parameterList.push.apply(parameterList, this.get("parameters"));
     }
     if (this.get("randomized")) {
-      extras = Random.seeded_shuffle(this.get("parameters"), "TODO - insert a reference to participant ID here!");
+      extras = Random.seeded_shuffle(this.get("parameters"), user_id + "generatedListExtras" + this.id);
       extras = extras.slice(0, extra_count);
       parameterList.push.apply(parameterList, extras);
-      parameterList = Random.seeded_shuffle(parameterList, "TODO - insert a reference to participant ID here!");
+      parameterList = Random.seeded_shuffle(parameterList, user_id + "generatedList" + this.id);
     } else {
       parameterList.push.apply(parameterList, this.get("parameters").slice(0, extra_count));
     }
     return parameterList;
   };
 
-  Model.prototype.generatorFn = function(trials_wanted) {
+  Model.prototype.generatorFn = function(user_id, trials_wanted) {
     return {};
   };
 
-  Model.prototype.shuffleListArrays = function(list) {
+  Model.prototype.shuffleListArrays = function(user_id, list) {
     var index, item, _i, _len;
-    console.log(list);
     for (index = _i = 0, _len = list.length; _i < _len; index = ++_i) {
       item = list[index];
-      list[index] = Random.seeded_shuffle(item, "TODO - insert a reference to participant ID here!" + index);
+      list[index] = Random.seeded_shuffle(item, user_id + "shuffleListArrays" + this.id + index);
     }
     return list;
   };
@@ -965,14 +1207,14 @@ module.exports = {
 
 ;require.register("models/TrialDataLog", function(exports, require, module) {
 'use strict';
-var Collection, Model, NestedAPIBase, TrialEventLog, _ref, _ref1,
+var Collection, EventLog, Model, NestedAPIBase, _ref, _ref1,
   __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 NestedAPIBase = require('./NestedAPIBase');
 
-TrialEventLog = require('./TrialEventLog');
+EventLog = require('./EventLog');
 
 Model = (function(_super) {
   __extends(Model, _super);
@@ -991,7 +1233,7 @@ Model = (function(_super) {
     {
       type: Backbone.Many,
       key: 'trialeventlogs',
-      collectionType: TrialEventLog.Collection
+      collectionType: EventLog.Collection
     }
   ];
 
@@ -1034,13 +1276,15 @@ module.exports = {
 };
 });
 
-;require.register("models/TrialEventLog", function(exports, require, module) {
+;require.register("models/TrialObject", function(exports, require, module) {
 'use strict';
-var Collection, Model, NestedAPIBase, _ref, _ref1,
+var Base, Collection, Model, nestedModules, _ref, _ref1,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
-NestedAPIBase = require('./NestedAPIBase');
+nestedModules = require('../utils/nestedModules');
+
+Base = require('./Base');
 
 Model = (function(_super) {
   __extends(Model, _super);
@@ -1050,84 +1294,71 @@ Model = (function(_super) {
     return _ref;
   }
 
-  return Model;
-
-})(NestedAPIBase.Model);
-
-Collection = (function(_super) {
-  __extends(Collection, _super);
-
-  function Collection() {
-    _ref1 = Collection.__super__.constructor.apply(this, arguments);
-    return _ref1;
-  }
-
-  Collection.prototype.model = Model;
-
-  return Collection;
-
-})(NestedAPIBase.Collection);
-
-module.exports = {
-  Model: Model,
-  Collection: Collection
-};
-});
-
-;require.register("models/TrialObject", function(exports, require, module) {
-'use strict';
-var Base, Collection, Model, modulename, nestedModules, subModels, _i, _len, _ref, _ref1, _ref2,
-  __hasProp = {}.hasOwnProperty,
-  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
-
-nestedModules = require('../utils/nestedModules');
-
-Base = require('./Base');
-
-subModels = {};
-
-_ref = nestedModules('models/TrialObjects');
-for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-  modulename = _ref[_i];
-  subModels[modulename] = modulename + ".Model";
-}
-
-Model = (function(_super) {
-  __extends(Model, _super);
-
-  function Model() {
-    _ref1 = Model.__super__.constructor.apply(this, arguments);
-    return _ref1;
-  }
-
-  Model.prototype.subModelTypes = subModels;
-
   Model.prototype.defaults = function() {
-    return {
-      delay: 0,
-      duration: 5000,
-      startWithTrial: true,
-      parameterizedAttributes: {},
-      /*
-      Triggers are objects of the form -
-      { eventName: "change", objectName: "firstImage",
-      callback: "firstImageMethod", arguments: {size: 17}}
-      The trigger will be registered to listen to this event
-      on the other trial object, and will invoke this callback
-      with these arguments. An optional argument of "once" can be
-      set to true to use listenToOnce instead of listenTo.
-      */
+    var defaults, option, parameter, _i, _j, _len, _len1, _ref1, _ref2;
+    defaults = {};
+    _ref1 = this.objectOptions();
+    for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+      option = _ref1[_i];
+      if (option["default"] != null) {
+        defaults[option.name] = option["default"];
+      }
+    }
+    _ref2 = this.requiredParameters();
+    for (_j = 0, _len1 = _ref2.length; _j < _len1; _j++) {
+      parameter = _ref2[_j];
+      defaults[parameter.name] = parameter["default"];
+    }
+    return defaults;
+  };
 
-      triggers: []
-    };
+  Model.prototype.requiredParameters = function() {
+    return [];
+  };
+
+  Model.prototype.objectOptions = function() {
+    return [
+      {
+        name: "delay",
+        "default": 0,
+        type: "number"
+      }, {
+        name: "duration",
+        "default": 0,
+        type: "number"
+      }, {
+        name: "startWithTrial",
+        "default": true,
+        type: "boolean"
+      }, {
+        name: "parameterizedAttributes",
+        "default": {},
+        type: "object"
+      }, {
+        /*
+        Triggers are objects of the form -
+        { eventName: "change", objectName: "firstImage",
+        callback: "firstImageMethod", arguments: {size: 17}}
+        The trigger will be registered to listen to this event
+        on the other trial object, and will invoke this callback
+        with these arguments. An optional argument of "once" can be
+        set to true to use listenToOnce instead of listenTo.
+        */
+
+        name: "triggers",
+        "default": [],
+        type: "array",
+        embedded_type: Object
+      }
+    ];
   };
 
   Model.prototype.parameterizedTrial = function(parameters) {
-    var attribute, attributes, parameterName, _ref2;
+    var attribute, attributes, parameterName, _ref1;
     attributes = _.clone(this.attributes);
-    _ref2 = this.get("parameterizedAttributes");
-    for (attribute in _ref2) {
-      parameterName = _ref2[attribute];
+    _ref1 = this.get("parameterizedAttributes");
+    for (attribute in _ref1) {
+      parameterName = _ref1[attribute];
       if (parameterName in parameters) {
         attributes[attribute] = parameters[parameterName];
       }
@@ -1135,8 +1366,41 @@ Model = (function(_super) {
     return attributes;
   };
 
-  Model.prototype.setParameter = function(attribute, parameter) {
-    return this.set("parameterizedAttributes", this.get("parameterizedAttributes")[attribute] = parameter);
+  Model.prototype.returnRequired = function() {
+    var parameter, required, _i, _len, _ref1;
+    required = [];
+    _ref1 = this.requiredParameters();
+    for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+      parameter = _ref1[_i];
+      required.push(this.get(parameter.name));
+    }
+    return required;
+  };
+
+  Model.prototype.returnOptions = function() {
+    var option, options, _i, _len, _ref1;
+    options = {};
+    _ref1 = this.objectOptions();
+    for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+      option = _ref1[_i];
+      if (this.get(option.name) != null) {
+        options[option.name] = this.get(option.name);
+      }
+    }
+    return options;
+  };
+
+  Model.prototype.allParameters = function() {
+    var parameter, parameters, _i, _len, _ref1;
+    parameters = {};
+    _ref1 = this.objectOptions().concat(this.requiredParameters());
+    for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+      parameter = _ref1[_i];
+      if (this.get(parameter.name) != null) {
+        parameters[parameter.alias || parameter.name] = this.get(parameter.name);
+      }
+    }
+    return parameters;
   };
 
   return Model;
@@ -1147,8 +1411,8 @@ Collection = (function(_super) {
   __extends(Collection, _super);
 
   function Collection() {
-    _ref2 = Collection.__super__.constructor.apply(this, arguments);
-    return _ref2;
+    _ref1 = Collection.__super__.constructor.apply(this, arguments);
+    return _ref1;
   }
 
   Collection.prototype.model = function(attrs, options) {
@@ -1282,6 +1546,153 @@ Model = (function(_super) {
 module.exports = {
   Model: Model,
   Type: "group"
+};
+});
+
+;require.register("models/TrialObjects/HTML/TextInput/TextAreaInputHTMLTrialObject", function(exports, require, module) {
+'use strict';
+var Model, TextInputHTMLTrialObject, _ref,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+TextInputHTMLTrialObject = require("../TextInputHTMLTrialObject");
+
+Model = (function(_super) {
+  __extends(Model, _super);
+
+  function Model() {
+    _ref = Model.__super__.constructor.apply(this, arguments);
+    return _ref;
+  }
+
+  return Model;
+
+})(TextInputHTMLTrialObject.Model);
+
+module.exports = {
+  Model: Model,
+  Type: "text-area-input"
+};
+});
+
+;require.register("models/TrialObjects/HTML/TextInputHTMLTrialObject", function(exports, require, module) {
+'use strict';
+var HTMLTrialObject, Model, _ref,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+HTMLTrialObject = require("../HTMLTrialObject");
+
+Model = (function(_super) {
+  __extends(Model, _super);
+
+  function Model() {
+    _ref = Model.__super__.constructor.apply(this, arguments);
+    return _ref;
+  }
+
+  Model.prototype.requiredParameters = function() {
+    return [
+      {
+        name: "prefill",
+        "default": "",
+        type: "string"
+      }, {
+        name: "prompt",
+        "default": "",
+        type: "string"
+      }
+    ];
+  };
+
+  Model.prototype.objectOptions = function() {
+    return Model.__super__.objectOptions.call(this).concat([
+      {
+        name: "fontSize",
+        "default": 24,
+        type: "number"
+      }, {
+        name: "fontFamily",
+        "default": "arial",
+        type: "string"
+      }, {
+        name: "fontStyle",
+        "default": "normal",
+        type: "string"
+      }, {
+        name: "backgroundColor",
+        "default": "",
+        type: "hex-colour"
+      }
+    ]);
+  };
+
+  Model.prototype.name = function() {
+    return this.get("name") || this.get("text");
+  };
+
+  return Model;
+
+})(HTMLTrialObject.Model);
+
+module.exports = {
+  Model: Model,
+  Type: "text-input"
+};
+});
+
+;require.register("models/TrialObjects/HTMLTrialObject", function(exports, require, module) {
+'use strict';
+var Model, TrialObject, _ref,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+TrialObject = require("../TrialObject");
+
+Model = (function(_super) {
+  __extends(Model, _super);
+
+  function Model() {
+    _ref = Model.__super__.constructor.apply(this, arguments);
+    return _ref;
+  }
+
+  Model.prototype.objectOptions = function() {
+    return Model.__super__.objectOptions.call(this).concat([
+      {
+        name: "height",
+        type: "number"
+      }, {
+        name: "x",
+        "default": 0,
+        type: "number"
+      }, {
+        name: "originX",
+        "default": "center",
+        type: "options",
+        options: ["center", "left", "right"]
+      }, {
+        name: "originY",
+        "default": "center",
+        type: "options",
+        options: ["center", "top", "bottom"]
+      }, {
+        name: "y",
+        "default": 0,
+        type: "number"
+      }, {
+        name: "width",
+        type: "number"
+      }
+    ]);
+  };
+
+  return Model;
+
+})(TrialObject.Model);
+
+module.exports = {
+  Model: Model
 };
 });
 
@@ -1457,9 +1868,8 @@ Model = (function(_super) {
       {
         name: "points",
         "default": [],
-        type: "array"
-      }, embedded - {
-        type: fabric.Point
+        type: "array",
+        embedded_type: fabric.Point
       }
     ];
   };
@@ -1520,7 +1930,7 @@ var Model, TextVisualTrialObject, _ref,
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
-TextVisualTrialObject = require("../TextVisualTrialObject");
+TextVisualTrialObject = require('../TextVisualTrialObject');
 
 Model = (function(_super) {
   __extends(Model, _super);
@@ -1533,14 +1943,6 @@ Model = (function(_super) {
   Model.prototype.objectOptions = function() {
     return Model.__super__.objectOptions.call(this).concat([
       {
-        name: "maxWidth",
-        "default": 100,
-        type: "number"
-      }, {
-        name: "maxHeight",
-        "default": 100,
-        type: "number"
-      }, {
         name: "justify",
         "default": "left",
         type: "options",
@@ -1667,30 +2069,8 @@ Model = (function(_super) {
     return _ref;
   }
 
-  Model.prototype.defaults = function() {
-    var defaults, option, parameter, _i, _j, _len, _len1, _ref1, _ref2;
-    defaults = {};
-    _ref1 = this.objectOptions();
-    for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
-      option = _ref1[_i];
-      if (option["default"] != null) {
-        defaults[option.name] = option["default"];
-      }
-    }
-    _ref2 = this.requiredParameters();
-    for (_j = 0, _len1 = _ref2.length; _j < _len1; _j++) {
-      parameter = _ref2[_j];
-      defaults[parameter.name] = parameter["default"];
-    }
-    return _.extend(defaults, Model.__super__.defaults.apply(this, arguments));
-  };
-
-  Model.prototype.requiredParameters = function() {
-    return [];
-  };
-
   Model.prototype.objectOptions = function() {
-    return [
+    return Model.__super__.objectOptions.call(this).concat([
       {
         name: "angle",
         "default": 0,
@@ -1703,9 +2083,10 @@ Model = (function(_super) {
         name: "height",
         type: "number"
       }, {
-        name: "left",
+        name: "x",
         "default": 0,
-        type: "number"
+        type: "number",
+        alias: "left"
       }, {
         name: "opacity",
         "default": 1,
@@ -1719,53 +2100,17 @@ Model = (function(_super) {
         name: "originY",
         "default": "center",
         type: "options",
-        options: ["center", "left", "right"]
+        options: ["center", "top", "bottom"]
       }, {
-        name: "top",
+        name: "y",
         "default": 0,
-        type: "number"
+        type: "number",
+        alias: "top"
       }, {
         name: "width",
         type: "number"
       }
-    ];
-  };
-
-  Model.prototype.returnRequired = function() {
-    var parameter, required, _i, _len, _ref1;
-    required = [];
-    _ref1 = this.requiredParameters();
-    for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
-      parameter = _ref1[_i];
-      required.push(this.get(parameter.name));
-    }
-    return required;
-  };
-
-  Model.prototype.returnOptions = function() {
-    var option, options, _i, _len, _ref1;
-    options = {};
-    _ref1 = this.objectOptions();
-    for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
-      option = _ref1[_i];
-      if (this.get(option.name) != null) {
-        options[option.name] = this.get(option.name);
-      }
-    }
-    return options;
-  };
-
-  Model.prototype.allParameters = function() {
-    var parameter, parameters, _i, _len, _ref1;
-    parameters = {};
-    _ref1 = this.objectOptions().concat(this.requiredParameters());
-    for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
-      parameter = _ref1[_i];
-      if (this.get(parameter.name) != null) {
-        parameters[parameter.name] = this.get(parameter.name);
-      }
-    }
-    return parameters;
+    ]);
   };
 
   return Model;
@@ -1777,47 +2122,62 @@ module.exports = {
 };
 });
 
-;require.register("routes/router", function(exports, require, module) {
-var Router, experimentView, homeView, _ref,
-  __hasProp = {}.hasOwnProperty,
-  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+;require.register("templates/TrialObjects/HTML/TextInput/textareainput", function(exports, require, module) {
+var __templateData = Handlebars.template(function (Handlebars,depth0,helpers,partials,data) {
+  this.compilerInfo = [4,'>= 1.0.0'];
+helpers = this.merge(helpers, Handlebars.helpers); data = data || {};
+  var buffer = "", stack1, helper, functionType="function", escapeExpression=this.escapeExpression;
 
-homeView = require("../views/HomeView");
 
-experimentView = require("../views/ExperimentView");
+  buffer += "<span class=\"text-input-prompt\">";
+  if (helper = helpers.prompt) { stack1 = helper.call(depth0, {hash:{},data:data}); }
+  else { helper = (depth0 && depth0.prompt); stack1 = typeof helper === functionType ? helper.call(depth0, {hash:{},data:data}) : helper; }
+  buffer += escapeExpression(stack1)
+    + "</span><textarea type=\"text\" class=\"text-input\" placeholder=\"";
+  if (helper = helpers.placeholder) { stack1 = helper.call(depth0, {hash:{},data:data}); }
+  else { helper = (depth0 && depth0.placeholder); stack1 = typeof helper === functionType ? helper.call(depth0, {hash:{},data:data}) : helper; }
+  buffer += escapeExpression(stack1)
+    + "\"></textarea>";
+  return buffer;
+  });
+if (typeof define === 'function' && define.amd) {
+  define([], function() {
+    return __templateData;
+  });
+} else if (typeof module === 'object' && module && module.exports) {
+  module.exports = __templateData;
+} else {
+  __templateData;
+}
+});
 
-module.exports = Router = (function(_super) {
-  __extends(Router, _super);
+;require.register("templates/TrialObjects/HTML/textinput", function(exports, require, module) {
+var __templateData = Handlebars.template(function (Handlebars,depth0,helpers,partials,data) {
+  this.compilerInfo = [4,'>= 1.0.0'];
+helpers = this.merge(helpers, Handlebars.helpers); data = data || {};
+  var buffer = "", stack1, helper, functionType="function", escapeExpression=this.escapeExpression;
 
-  function Router() {
-    _ref = Router.__super__.constructor.apply(this, arguments);
-    return _ref;
-  }
 
-  Router.prototype.routes = {
-    '': 'home'
-  };
-
-  Router.prototype.home = function() {
-    return true;
-  };
-
-  Router.prototype.loadView = function(view) {
-    if (this.view) {
-      if (this.view.close) {
-        this.view.close();
-      } else {
-        this.view.remove();
-      }
-    }
-    this.view = view;
-    this.view.appendTo("#app");
-    return this.view.render();
-  };
-
-  return Router;
-
-})(Backbone.Router);
+  buffer += "<span class=\"text-input-prompt\">";
+  if (helper = helpers.prompt) { stack1 = helper.call(depth0, {hash:{},data:data}); }
+  else { helper = (depth0 && depth0.prompt); stack1 = typeof helper === functionType ? helper.call(depth0, {hash:{},data:data}) : helper; }
+  buffer += escapeExpression(stack1)
+    + "</span><input type=\"text\" class=\"text-input\" placeholder=\"";
+  if (helper = helpers.placeholder) { stack1 = helper.call(depth0, {hash:{},data:data}); }
+  else { helper = (depth0 && depth0.placeholder); stack1 = typeof helper === functionType ? helper.call(depth0, {hash:{},data:data}) : helper; }
+  buffer += escapeExpression(stack1)
+    + "\"></input>";
+  return buffer;
+  });
+if (typeof define === 'function' && define.amd) {
+  define([], function() {
+    return __templateData;
+  });
+} else if (typeof module === 'object' && module && module.exports) {
+  module.exports = __templateData;
+} else {
+  __templateData;
+}
 });
 
 ;require.register("templates/application", function(exports, require, module) {
@@ -1864,26 +2224,6 @@ if (typeof define === 'function' && define.amd) {
 }
 });
 
-;require.register("templates/home", function(exports, require, module) {
-var __templateData = Handlebars.template(function (Handlebars,depth0,helpers,partials,data) {
-  this.compilerInfo = [4,'>= 1.0.0'];
-helpers = this.merge(helpers, Handlebars.helpers); data = data || {};
-  
-
-
-  return "<h2>Welcome to PsychoCoffee</h2>";
-  });
-if (typeof define === 'function' && define.amd) {
-  define([], function() {
-    return __templateData;
-  });
-} else if (typeof module === 'object' && module && module.exports) {
-  module.exports = __templateData;
-} else {
-  __templateData;
-}
-});
-
 ;require.register("templates/progressbar", function(exports, require, module) {
 var __templateData = Handlebars.template(function (Handlebars,depth0,helpers,partials,data) {
   this.compilerInfo = [4,'>= 1.0.0'];
@@ -1911,7 +2251,15 @@ helpers = this.merge(helpers, Handlebars.helpers); data = data || {};
   var buffer = "", stack1, helper, functionType="function", escapeExpression=this.escapeExpression;
 
 
-  buffer += "<div id=\"trial-draw\"><canvas id=\"trial-canvas\" height=\"";
+  buffer += "<div id=\"trial-draw\" style=\"height: ";
+  if (helper = helpers.height) { stack1 = helper.call(depth0, {hash:{},data:data}); }
+  else { helper = (depth0 && depth0.height); stack1 = typeof helper === functionType ? helper.call(depth0, {hash:{},data:data}) : helper; }
+  buffer += escapeExpression(stack1)
+    + "px; width: ";
+  if (helper = helpers.width) { stack1 = helper.call(depth0, {hash:{},data:data}); }
+  else { helper = (depth0 && depth0.width); stack1 = typeof helper === functionType ? helper.call(depth0, {hash:{},data:data}) : helper; }
+  buffer += escapeExpression(stack1)
+    + "px\"><canvas id=\"trial-canvas\" height=\"";
   if (helper = helpers.height) { stack1 = helper.call(depth0, {hash:{},data:data}); }
   else { helper = (depth0 && depth0.height); stack1 = typeof helper === functionType ? helper.call(depth0, {hash:{},data:data}) : helper; }
   buffer += escapeExpression(stack1)
@@ -1919,7 +2267,15 @@ helpers = this.merge(helpers, Handlebars.helpers); data = data || {};
   if (helper = helpers.width) { stack1 = helper.call(depth0, {hash:{},data:data}); }
   else { helper = (depth0 && depth0.width); stack1 = typeof helper === functionType ? helper.call(depth0, {hash:{},data:data}) : helper; }
   buffer += escapeExpression(stack1)
-    + "\"></canvas></div>\n<div id=\"trial-hidden\"></div>\n";
+    + "\"></canvas><div id=\"trial-elements\" style=\"height: ";
+  if (helper = helpers.height) { stack1 = helper.call(depth0, {hash:{},data:data}); }
+  else { helper = (depth0 && depth0.height); stack1 = typeof helper === functionType ? helper.call(depth0, {hash:{},data:data}) : helper; }
+  buffer += escapeExpression(stack1)
+    + "px; width: ";
+  if (helper = helpers.width) { stack1 = helper.call(depth0, {hash:{},data:data}); }
+  else { helper = (depth0 && depth0.width); stack1 = typeof helper === functionType ? helper.call(depth0, {hash:{},data:data}) : helper; }
+  buffer += escapeExpression(stack1)
+    + "px\"></div></div>\n<div id=\"trial-hidden\"></div>\n";
   return buffer;
   });
 if (typeof define === 'function' && define.amd) {
@@ -2059,15 +2415,9 @@ Clock = (function() {
   };
 
   Clock.prototype.delayedTrigger = function(delay, object, callback) {
-    var frames, nearestFrame, timeoutDelay;
+    var frames, nearestFrame;
     frames = delay / this.tick;
     nearestFrame = Math.floor(frames);
-    timeoutDelay = this.tick * (nearestFrame - frames);
-    if (timeoutDelay >= 1) {
-      callback = function() {
-        return setTimeout(callback, timeoutDelay);
-      };
-    }
     return object.listenToOnce(this, this.frame + nearestFrame, callback);
   };
 
@@ -2093,11 +2443,12 @@ Clock = (function() {
 
   Clock.prototype.stopTimer = function() {
     clearTimeout(this.timer);
-    return this.frame = 0;
+    this.frame = 0;
+    return delete this.timerStart;
   };
 
   Clock.prototype.timerElapsed = function() {
-    return this.getElapsedTime(this.timerStart);
+    return this.getElapsedTime(this.timerStart) || 0;
   };
 
   Clock.prototype.ticktock = function() {
@@ -2134,43 +2485,63 @@ if (typeof window === 'undefined') {
 id_attr = "id";
 
 diff = function(master, update) {
-  var array_diff, i, name, ret, value, _i, _ref;
-  if (!master) {
+  var array_diff, i, keys, name, obj_diff, ret, value, _i, _ref;
+  if (_.isEmpty(master)) {
     return update;
   }
   ret = {};
-  for (name in master) {
-    value = master[name];
-    if (name in update) {
+  for (name in update) {
+    value = update[name];
+    if (name in master) {
       if (_.isObject(update[name])) {
         if (_.isArray(update[name])) {
           ret[name] = [];
           for (i = _i = 0, _ref = update[name].length; 0 <= _ref ? _i < _ref : _i > _ref; i = 0 <= _ref ? ++_i : --_i) {
-            array_diff = diff(master[name][i], update[name][i]);
-            if (!_.isEmpty(array_diff)) {
-              ret[name].push(array_diff);
+            if (_.isObject(update[name][i])) {
+              array_diff = diff(master[name][i], update[name][i]);
+              if (!_.isEmpty(array_diff)) {
+                ret[name].push(array_diff);
+              }
+            } else {
+              ret[name].push(update[name][i]);
             }
           }
           if (ret[name].length === 0) {
             delete ret[name];
           }
         } else {
-          diff = diff(master[name], update[name]);
-          if (!_.isEmpty(diff)) {
-            ret[name] = diff;
+          obj_diff = diff(master[name], update[name]);
+          if (!_.isEmpty(obj_diff)) {
+            ret[name] = obj_diff;
           }
         }
       } else if (!_.isEqual(master[name], update[name]) || name === id_attr) {
         ret[name] = update[name];
       }
+    } else {
+      ret[name] = update[name];
     }
   }
-  return ret;
+  keys = Object.keys(ret);
+  if (keys.length === 1 && keys[0] === id_attr) {
+    return {};
+  } else {
+    return ret;
+  }
 };
+
+/*
+This will not work, and is not designed to work
+for arrays that do not contain objects.
+Arrays of objects allow for unique identification
+of elements in the array, and mean that the exact ordering
+is unimportant. Hard to do this with a diff otherwise.
+*/
+
 
 merge = function(master, update) {
   var i, master_node, name, update_node, value, _i, _ref;
-  if (!master) {
+  if (_.isEmpty(master)) {
     return update;
   }
   for (name in update) {
@@ -2182,9 +2553,9 @@ merge = function(master, update) {
             update_node = update[name][i];
             if (_.isObject(update_node)) {
               master_node = _.find(master[name], function(item) {
-                return item.id === update_node.id;
+                return item[id_attr] === update_node[id_attr];
               });
-              if (master_node) {
+              if (_.isObject(master_node)) {
                 master_node = merge(master_node, update_node);
               } else {
                 master[name].push(update_node);
@@ -2197,7 +2568,6 @@ merge = function(master, update) {
           master[name] = merge(master[name], update[name]);
         }
       } else {
-        console.log(name, master[name], update[name]);
         master[name] = update[name];
       }
     } else {
@@ -2279,6 +2649,43 @@ module.exports = fingerprint = function() {
     }
     return _results;
   })()).join(",");
+};
+});
+
+;require.register("utils/hashObject", function(exports, require, module) {
+/*
+Derived from:
+ Javascript HashCode v1.0.0
+ This function returns a hash code (MD5) based on the argument object.
+ http://pmav.eu/stuff/javascript-hash-code
+
+ Example:
+  var s = "my String";
+  alert(HashCode.value(s));
+
+ pmav, 2010
+*/
+
+var serialize;
+
+serialize = function(object) {
+  var element, serializedCode, type;
+  serializedCode = "";
+  type = typeof object;
+  if (type === 'object') {
+    for (element in object) {
+      serializedCode += "[" + type + ":" + element + serialize(object[element]) + "]";
+    }
+  } else if (type === 'function') {
+    serializedCode += "[" + type + ":" + object.toString() + "]";
+  } else {
+    serializedCode += "[" + type + ":" + object + "]";
+  }
+  return serializedCode.replace(/\s/g, "");
+};
+
+module.exports = function(object) {
+  return md5(serialize(object));
 };
 });
 
@@ -2477,7 +2884,7 @@ module.exports = function(folder, moduleSubKey) {
 });
 
 ;require.register("utils/random", function(exports, require, module) {
-var seeded_shuffle;
+var GUIDseed, guid, seedGUID, seeded_shuffle, seededguid;
 
 seeded_shuffle = function(source_array, seed) {
   var array, i, m, random, t;
@@ -2493,8 +2900,40 @@ seeded_shuffle = function(source_array, seed) {
   return array;
 };
 
+guid = function(seed) {
+  var random, _p8;
+  if (seed == null) {
+    seed = null;
+  }
+  random = seed || Math.random;
+  _p8 = function(s) {
+    var p;
+    p = (random().toString(16) + "000000000").substr(2, 8);
+    if (s) {
+      return "-" + p.substr(0, 4) + "-" + p.substr(4, 4);
+    } else {
+      return p;
+    }
+  };
+  return _p8() + _p8(true) + _p8(true) + _p8();
+};
+
+seededguid = function() {
+  return guid(PsychoCoffee.random.GUIDseed);
+};
+
+GUIDseed = null;
+
+seedGUID = function(seed) {
+  return PsychoCoffee.random.GUIDseed = new Math.seedrandom(seed);
+};
+
 module.exports = {
-  seeded_shuffle: seeded_shuffle
+  seeded_shuffle: seeded_shuffle,
+  guid: guid,
+  seededguid: seededguid,
+  seedGUID: seedGUID,
+  GUIDseed: GUIDseed
 };
 });
 
@@ -2503,27 +2942,128 @@ var stringHash;
 
 module.exports = stringHash = function(string) {
   var chr, hash, i, _i, _ref;
-  hash = 0;
+  hash = 5381;
   if (string.length === 0) {
     return hash;
   }
   for (i = _i = 0, _ref = string.length; 0 <= _ref ? _i < _ref : _i > _ref; i = 0 <= _ref ? ++_i : --_i) {
     chr = string.charCodeAt(i);
-    hash = ((hash << 5) - hash) + chr;
+    hash = ((hash << 5) + hash) + chr;
     hash |= 0;
   }
-  return hash;
+  return hash.toString(16);
+};
+});
+
+;require.register("utils/urlParse", function(exports, require, module) {
+var decodeGetParams;
+
+decodeGetParams = function(url) {
+  var data, item, params, _i, _len, _ref;
+  url = decodeURIComponent(url).split("?")[1];
+  params = {};
+  if (url) {
+    _ref = url.split("&");
+    for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+      item = _ref[_i];
+      data = item.split("=");
+      if (data[1]) {
+        params[data[0]] = data[1];
+      }
+    }
+  }
+  return params;
+};
+
+module.exports = {
+  decodeGetParams: decodeGetParams
+};
+});
+
+;require.register("utils/wrapCanvasText", function(exports, require, module) {
+module.exports = function(t, canvas, maxW, maxH, justify) {
+  var breakLineCount, context, currentLine, formatted, i, isNewLine, lineHeight, maxHAdjusted, n, ret, sansBreaks, testOverlap, w, withHypeh, wordOverlap, words, _i, _ref;
+  maxH = maxH != null ? maxH : 0;
+  words = t.text.split(" ");
+  formatted = '';
+  justify = justify || 'left';
+  sansBreaks = t.text.replace(/(\r\n|\n|\r)/gm, "");
+  lineHeight = new fabric.Text(sansBreaks, {
+    fontFamily: t.fontFamily,
+    fontSize: t.fontSize
+  }).height;
+  maxHAdjusted = maxH > 0 ? maxH - lineHeight : 0;
+  context = canvas.getContext("2d");
+  context.font = t.fontSize + "px " + t.fontFamily;
+  currentLine = '';
+  breakLineCount = 0;
+  n = 0;
+  while (n < words.length) {
+    isNewLine = currentLine === "";
+    testOverlap = currentLine + ' ' + words[n];
+    w = context.measureText(testOverlap).width;
+    if (w < maxW) {
+      if (currentLine !== '') {
+        currentLine += ' ';
+      }
+      currentLine += words[n];
+    } else {
+      if (isNewLine) {
+        wordOverlap = "";
+        for (i = _i = 0, _ref = words[n].length; 0 <= _ref ? _i < _ref : _i > _ref; i = 0 <= _ref ? ++_i : --_i) {
+          wordOverlap += words[n].charAt(i);
+          withHypeh = wordOverlap + "-";
+          if (context.measureText(withHypeh).width >= maxW) {
+            withHypeh = wordOverlap.substr(0, wordOverlap.length - 2) + "-";
+            words[n] = words[n].substr(wordOverlap.length, -1, words[n].length);
+            formatted += withHypeh;
+            break;
+          }
+        }
+      }
+      while (justify === 'right' && context.measureText(' ' + currentLine).width < maxW) {
+        currentLine = ' ' + currentLine;
+      }
+      while (justify === 'center' && context.measureText(' ' + currentLine + ' ').width < maxW) {
+        currentLine = ' ' + currentLine + ' ';
+      }
+      formatted += currentLine + '\n';
+      breakLineCount++;
+      currentLine = "";
+      continue;
+    }
+    if (maxHAdjusted > 0 && (breakLineCount * lineHeight) > maxHAdjusted) {
+      formatted = formatted.substr(0, formatted.length - 3) + "...\n";
+      currentLine = "";
+      break;
+    }
+    n++;
+  }
+  if (currentLine !== '') {
+    while (justify === 'right' && context.measureText(' ' + currentLine).width < maxW) {
+      currentLine = ' ' + currentLine;
+    }
+    while (justify === 'center' && context.measureText(' ' + currentLine + ' ').width < maxW) {
+      currentLine = ' ' + currentLine + ' ';
+    }
+    formatted += currentLine + '\n';
+    breakLineCount++;
+    currentLine = "";
+  }
+  formatted = formatted.substr(0, formatted.length - 1);
+  ret = t.setText(formatted);
+  return ret;
 };
 });
 
 ;require.register("views/BlockView", function(exports, require, module) {
 'use strict';
-var BlockView, View, _ref,
+var BlockView, HandlerView, _ref,
   __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
-View = require('./View');
+HandlerView = require('./HandlerView');
 
 module.exports = BlockView = (function(_super) {
   __extends(BlockView, _super);
@@ -2539,32 +3079,30 @@ module.exports = BlockView = (function(_super) {
   BlockView.prototype.initialize = function(options) {
     BlockView.__super__.initialize.apply(this, arguments);
     this.generateTrialModels();
-    return this.instantiateSubViews("trials", "TrialView", this.trialObjectViewType);
+    return this.instantiateSubViews("trials", "TrialView", null);
   };
 
   BlockView.prototype.generateTrialModels = function() {
-    var model, parameterSet, parameters, trial, trialListLength, _i, _len, _ref1, _results;
-    _ref1 = this.model.returnParameters(), trialListLength = _ref1[0], parameterSet = _ref1[1];
-    if (!trialListLength) {
-      return this.model.get("trials").create(this.model.returnTrialProperties(true));
-    } else {
-      _results = [];
-      for (_i = 0, _len = parameterSet.length; _i < _len; _i++) {
-        parameters = parameterSet[_i];
-        trial = this.model.get("trials").create(this.model.returnTrialProperties());
-        _results.push(trial.get("trialObjects").add((function() {
-          var _j, _len1, _ref2, _results1;
-          _ref2 = this.model.get("trialObjects").models;
-          _results1 = [];
-          for (_j = 0, _len1 = _ref2.length; _j < _len1; _j++) {
-            model = _ref2[_j];
-            _results1.push(model.parameterizedTrial(parameters));
-          }
-          return _results1;
-        }).call(this)));
-      }
-      return _results;
+    var model, parameters, trial, _i, _len, _ref1, _ref2, _results;
+    _ref1 = this.model.returnParameters(this.user_id, this.injectedParameters), this.parameters = _ref1[0], this.trialListLength = _ref1[1], this.parameterSet = _ref1[2];
+    _ref2 = this.parameterSet;
+    _results = [];
+    for (_i = 0, _len = _ref2.length; _i < _len; _i++) {
+      parameters = _ref2[_i];
+      trial = this.model.get("trials").create(this.model.returnTrialProperties(parameters));
+      trial.set("parameters", parameters);
+      _results.push(trial.get("trialObjects").add((function() {
+        var _j, _len1, _ref3, _results1;
+        _ref3 = this.model.get("trialObjects").models;
+        _results1 = [];
+        for (_j = 0, _len1 = _ref3.length; _j < _len1; _j++) {
+          model = _ref3[_j];
+          _results1.push(model.parameterizedTrial(parameters));
+        }
+        return _results1;
+      }).call(this)));
     }
+    return _results;
   };
 
   BlockView.prototype.preLoadBlock = function(queue) {
@@ -2579,7 +3117,20 @@ module.exports = BlockView = (function(_super) {
   };
 
   BlockView.prototype.startBlock = function() {
-    var currentTrial;
+    var currentTrial, date_time;
+    date_time = new Date().getTime();
+    if (this.datamodel.get("start_time") != null) {
+      this.logEvent("block_resume", {
+        date_time: date_time
+      });
+    } else {
+      this.datamodel.set("start_time", date_time);
+      this.logEvent("block_start", {
+        date_time: date_time
+      });
+    }
+    this.datamodel.set("block_id", this.model.id);
+    this.datamodel.set("parameters", this.parameters);
     this.datamodel.set("trial", this.datamodel.get("trial") || 0);
     currentTrial = this.model.get("trials").at(this.datamodel.get("trial"));
     return this.showTrial(currentTrial);
@@ -2588,7 +3139,7 @@ module.exports = BlockView = (function(_super) {
   BlockView.prototype.showTrial = function(trial) {
     var trialView;
     if (!trial) {
-      console.log("Done, finito, finished!");
+      this.endBlock();
       return;
     }
     trialView = this.subViews[trial.get("id")];
@@ -2616,21 +3167,39 @@ module.exports = BlockView = (function(_super) {
     return this.showTrial(currentTrial);
   };
 
+  BlockView.prototype.endBlock = function() {
+    var date_time, key, view, _ref1;
+    date_time = new Date().getTime();
+    this.logEvent("block_end", {
+      date_time: date_time
+    });
+    this.datamodel.set("end_time", date_time);
+    this.datamodel.set("complete", true);
+    _ref1 = this.subViews;
+    for (key in _ref1) {
+      view = _ref1[key];
+      view.remove();
+    }
+    this.stopListening();
+    this.remove();
+    return this.trigger("blockEnded");
+  };
+
   return BlockView;
 
-})(View);
+})(HandlerView);
 });
 
 ;require.register("views/ExperimentView", function(exports, require, module) {
 'use strict';
-var Experiment, ExperimentDataHandler, ExperimentView, ProgressBarView, Template, View, clock, fingerprint, stringHash, _ref,
+var Experiment, ExperimentDataHandler, ExperimentView, HandlerView, ProgressBarView, Template, clock, fingerprint, stringHash, urlParse, _ref,
   __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
 clock = require("utils/clock");
 
-View = require('./View');
+HandlerView = require('./HandlerView');
 
 Experiment = require('../models/Experiment');
 
@@ -2644,12 +3213,15 @@ stringHash = require('utils/stringHash');
 
 fingerprint = require('utils/fingerprint');
 
+urlParse = require('utils/urlParse');
+
 module.exports = ExperimentView = (function(_super) {
   __extends(ExperimentView, _super);
 
   function ExperimentView() {
+    this.endExperiment = __bind(this.endExperiment, this);
+    this.showBlock = __bind(this.showBlock, this);
     this.startExperiment = __bind(this.startExperiment, this);
-    this.startBlock = __bind(this.startBlock, this);
     this.refreshTime = __bind(this.refreshTime, this);
     this.initialize = __bind(this.initialize, this);
     _ref = ExperimentView.__super__.constructor.apply(this, arguments);
@@ -2659,18 +3231,41 @@ module.exports = ExperimentView = (function(_super) {
   ExperimentView.prototype.template = Template;
 
   ExperimentView.prototype.initialize = function() {
-    var _this = this;
+    var _ref1, _ref2,
+      _this = this;
     ExperimentView.__super__.initialize.apply(this, arguments);
-    console.log(fingerprint());
-    this.user_id = stringHash("testing!");
+    this.urlParams = urlParse.decodeGetParams(window.location.href);
+    switch ((_ref1 = this.model) != null ? _ref1.get("subjectPool") : void 0) {
+      case "AMT":
+        this.user_id = this.urlParams.workerId;
+        this.assignment_id = this.urlParams.assignmentId;
+        this.turkSubmitTo = this.urlParams.turkSubmitTo;
+        this.hitId = this.urlParams.hitId;
+        break;
+      default:
+        this.user_id = stringHash(fingerprint());
+    }
     this.clock = new clock.Clock();
     this.refreshTime();
     this.render();
     this.appendTo("#app");
-    this.datacollection = new ExperimentDataHandler.Collection;
-    return this.datacollection.fetch().then(function() {
-      _this.datamodel = _this.datacollection.getOrCreateParticipantModel(2, _this.model.get("saveInterval"));
-      _this.instantiateSubViews("blocks", "BlockView");
+    this.datacollection = new ExperimentDataHandler.Collection({
+      experiment_identifier: (_ref2 = this.model) != null ? _ref2.get("identifier") : void 0,
+      participant_id: this.user_id
+    });
+    return this.datacollection.filterFetch().then(function() {
+      _this.datamodel = _this.datacollection.getOrCreateParticipantModel(_this.user_id, _this.model);
+      _this.datamodel.set("parameters", _this.datamodel.get("parameters") || _this.model.returnParameters(_this.user_id));
+      if (_this.model.get("subjectPool") === "AMT") {
+        _this.datamodel.set({
+          assignment_id: _this.assignment_id,
+          turkSubmitTo: _this.turkSubmitTo,
+          hitId: _this.hitId
+        });
+      }
+      _this.instantiateSubViews("blocks", "BlockView", null, {
+        parameters: _this.datamodel.get("parameters")
+      });
       return _this.preLoadExperiment();
     });
   };
@@ -2679,8 +3274,46 @@ module.exports = ExperimentView = (function(_super) {
     return this.time = this.clock.getTime();
   };
 
-  ExperimentView.prototype.startBlock = function(block) {
+  ExperimentView.prototype.preLoadExperiment = function() {
+    var key, queue, view, _ref1;
+    queue = new createjs.LoadQueue(true);
+    _ref1 = this.subViews;
+    for (key in _ref1) {
+      view = _ref1[key];
+      view.preLoadBlock(queue);
+    }
+    this.progressBarView = new ProgressBarView({
+      queue: queue,
+      complete: this.startExperiment
+    });
+    this.progressBarView.appendTo("#messages");
+    return this.progressBarView.render();
+  };
+
+  ExperimentView.prototype.startExperiment = function() {
+    var currentBlock, date_time;
+    date_time = new Date().getTime();
+    if (this.datamodel.get("start_time") != null) {
+      this.logEvent("experiment_resume", {
+        date_time: date_time
+      });
+    } else {
+      this.datamodel.set("start_time", date_time);
+      this.logEvent("experiment_start", {
+        date_time: date_time
+      });
+    }
+    this.datamodel.set("block", this.datamodel.get("block") || 0);
+    currentBlock = this.model.get("blocks").at(this.datamodel.get("block"));
+    return this.showBlock(currentBlock);
+  };
+
+  ExperimentView.prototype.showBlock = function(block) {
     var blockView;
+    if (!block) {
+      this.endExperiment();
+      return;
+    }
     blockView = this.subViews[block.get("id")];
     if (this.blockView) {
       if (this.blockView.close) {
@@ -2689,64 +3322,73 @@ module.exports = ExperimentView = (function(_super) {
         this.blockView.remove();
       }
     }
-    this.blockdatamodel = this.datamodel.get("blockdatahandlers").at(block) || this.datamodel.get("blockdatahandlers").create();
+    this.blockdatamodel = this.datamodel.get("blockdatahandlers").at(this.datamodel.get("block")) || this.datamodel.get("blockdatahandlers").create();
     this.datamodel.save();
     this.blockView = blockView;
     this.blockView.datamodel = this.blockdatamodel;
     this.blockView.render();
+    this.listenToOnce(this.blockView, "blockEnded", this.nextBlock);
     return this.blockView.startBlock();
   };
 
-  ExperimentView.prototype.preLoadExperiment = function() {
-    var key, progressBarView, queue, view, _ref1;
-    queue = new createjs.LoadQueue(true);
-    _ref1 = this.subViews;
-    for (key in _ref1) {
-      view = _ref1[key];
-      view.preLoadBlock(queue);
-    }
-    progressBarView = new ProgressBarView({
-      queue: queue,
-      complete: this.startExperiment
-    });
-    progressBarView.appendTo("#messages");
-    return progressBarView.render();
+  ExperimentView.prototype.nextBlock = function() {
+    var currentBlock;
+    this.datamodel.set("block", this.datamodel.get("block") + 1);
+    currentBlock = this.model.get("blocks").at(this.datamodel.get("block"));
+    return this.showBlock(currentBlock);
   };
 
-  ExperimentView.prototype.startExperiment = function() {
-    var currentBlock;
-    currentBlock = this.model.get("blocks").at(this.datamodel.get("block") || 0);
-    return this.startBlock(currentBlock);
+  ExperimentView.prototype.endExperiment = function() {
+    var date_time,
+      _this = this;
+    date_time = new Date().getTime();
+    this.logEvent("experiment_end", {
+      date_time: date_time
+    });
+    this.datamodel.set("end_time", date_time);
+    this.datamodel.set("complete", true);
+    return this.datamodel.save(null, {
+      now: true,
+      success: function() {
+        console.log("I'm done here!");
+        return _this.$("#messages").html("<h1>Experiment Complete - Thank you</h1>");
+      }
+    });
   };
 
   return ExperimentView;
 
-})(View);
+})(HandlerView);
 });
 
-;require.register("views/HomeView", function(exports, require, module) {
+;require.register("views/HandlerView", function(exports, require, module) {
 'use strict';
-var HomeView, View, template, _ref,
+var HandlerView, View, _ref,
+  __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
-template = require('../templates/home');
-
 View = require('./View');
 
-module.exports = HomeView = (function(_super) {
-  __extends(HomeView, _super);
+module.exports = HandlerView = (function(_super) {
+  __extends(HandlerView, _super);
 
-  function HomeView() {
-    _ref = HomeView.__super__.constructor.apply(this, arguments);
+  function HandlerView() {
+    this.logEvent = __bind(this.logEvent, this);
+    _ref = HandlerView.__super__.constructor.apply(this, arguments);
     return _ref;
   }
 
-  HomeView.prototype.id = 'home-view';
+  HandlerView.prototype.logEvent = function(event_type, options) {
+    if (options == null) {
+      options = {};
+    }
+    return this.datamodel.logEvent(event_type, this.clock, _.extend(options, {
+      object: this.model.name()
+    }));
+  };
 
-  HomeView.prototype.template = template;
-
-  return HomeView;
+  return HandlerView;
 
 })(View);
 });
@@ -2792,6 +3434,14 @@ module.exports = ProgressBarView = (function(_super) {
     return this.$el.animate({
       opacity: 0
     }, 1000, "swing", this.close);
+  };
+
+  ProgressBarView.prototype.render = function() {
+    ProgressBarView.__super__.render.apply(this, arguments);
+    if (this.queue._numItems === 0) {
+      this.setProgressBar(1);
+      return this.finish();
+    }
   };
 
   ProgressBarView.prototype.close = function() {
@@ -2925,10 +3575,14 @@ module.exports = TrialObjectView = (function(_super) {
       view = _.find(siblingViews, function(sibling) {
         return sibling.name === trigger.objectName;
       });
-      _results.push(this.listenTo(view, trigger.eventName, function(options) {
-        console.log("Triggering", trigger.eventName);
-        return _this[trigger.callback](_.extend(options, trigger["arguments"] || {}));
-      }));
+      if (view != null) {
+        _results.push(this.listenTo(view, trigger.eventName, function(options) {
+          console.log("Triggering", trigger.eventName);
+          return _this[trigger.callback](_.extend(options, trigger["arguments"] || {}));
+        }));
+      } else {
+        _results.push(console.debug("There is no object with the name\n" + trigger.objectName + " in this trial."));
+      }
     }
     return _results;
   };
@@ -3070,6 +3724,132 @@ module.exports = GroupTrialObjectView = (function(_super) {
   };
 
   return GroupTrialObjectView;
+
+})(TrialObjectView);
+});
+
+;require.register("views/TrialObjectViews/HTML/TextInput/TextAreaInputHTMLTrialObjectView", function(exports, require, module) {
+'use strict';
+var Template, TextAreaInputHTMLTrialObjectView, TextInputHTMLTrialObjectView, _ref,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+TextInputHTMLTrialObjectView = require('../TextInputHTMLTrialObjectView');
+
+Template = require("/templates/TrialObjects/HTML/TextInput/textareainput");
+
+module.exports = TextAreaInputHTMLTrialObjectView = (function(_super) {
+  __extends(TextAreaInputHTMLTrialObjectView, _super);
+
+  function TextAreaInputHTMLTrialObjectView() {
+    _ref = TextAreaInputHTMLTrialObjectView.__super__.constructor.apply(this, arguments);
+    return _ref;
+  }
+
+  TextAreaInputHTMLTrialObjectView.prototype.template = Template;
+
+  return TextAreaInputHTMLTrialObjectView;
+
+})(TextInputHTMLTrialObjectView);
+});
+
+;require.register("views/TrialObjectViews/HTML/TextInputHTMLTrialObjectView", function(exports, require, module) {
+'use strict';
+var HTMLTrialObjectView, Template, TextInputHTMLTrialObjectView, _ref,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+HTMLTrialObjectView = require('../HTMLTrialObjectView');
+
+Template = require("/templates/TrialObjects/HTML/textinput");
+
+module.exports = TextInputHTMLTrialObjectView = (function(_super) {
+  __extends(TextInputHTMLTrialObjectView, _super);
+
+  function TextInputHTMLTrialObjectView() {
+    _ref = TextInputHTMLTrialObjectView.__super__.constructor.apply(this, arguments);
+    return _ref;
+  }
+
+  TextInputHTMLTrialObjectView.prototype.template = Template;
+
+  TextInputHTMLTrialObjectView.prototype.deactivate = function() {
+    TextInputHTMLTrialObjectView.__super__.deactivate.apply(this, arguments);
+    return this.logInput();
+  };
+
+  TextInputHTMLTrialObjectView.prototype.logInput = function() {
+    return this.logEvent("text_input", {
+      "text_value": this.$(".text-input").val()
+    });
+  };
+
+  return TextInputHTMLTrialObjectView;
+
+})(HTMLTrialObjectView);
+});
+
+;require.register("views/TrialObjectViews/HTMLTrialObjectView", function(exports, require, module) {
+'use strict';
+var HTMLTrialObjectView, TrialObjectView, _ref,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+TrialObjectView = require('../TrialObjectView');
+
+module.exports = HTMLTrialObjectView = (function(_super) {
+  __extends(HTMLTrialObjectView, _super);
+
+  function HTMLTrialObjectView() {
+    _ref = HTMLTrialObjectView.__super__.constructor.apply(this, arguments);
+    return _ref;
+  }
+
+  HTMLTrialObjectView.prototype.className = "trial-object";
+
+  HTMLTrialObjectView.prototype.attach = function(endpoints) {
+    this.$el.css("visibility", "hidden");
+    this.appendTo(endpoints.elements);
+    return this.positionElement();
+  };
+
+  HTMLTrialObjectView.prototype.activate = function() {
+    this.$el.css("visibility", "visible");
+    return HTMLTrialObjectView.__super__.activate.call(this);
+  };
+
+  HTMLTrialObjectView.prototype.deactivate = function() {
+    this.$el.css("visibility", "hidden");
+    return HTMLTrialObjectView.__super__.deactivate.call(this);
+  };
+
+  HTMLTrialObjectView.prototype.positionElement = function() {
+    switch (this.model.get("originX")) {
+      case "left":
+        this.$el.css("left", this.model.get("x"));
+        break;
+      case "right":
+        this.$el.css("right", this.model.get("x"));
+        break;
+      case "center":
+        this.$el.css("left", this.model.get("x") - this.$el.width() / 2);
+    }
+    switch (this.model.get("originY")) {
+      case "top":
+        return this.$el.css("top", this.model.get("y"));
+      case "bottom":
+        return this.$el.css("bottom", this.model.get("y"));
+      case "center":
+        return this.$el.css("top", this.model.get("y") - this.$el.height() / 2);
+    }
+  };
+
+  HTMLTrialObjectView.prototype.render = function() {
+    this.$el.html(this.template(this.model.allParameters()));
+    return this.positionElement();
+  };
+
+  return HTMLTrialObjectView;
 
 })(TrialObjectView);
 });
@@ -3263,6 +4043,36 @@ module.exports = RectangleVisualTrialObjectView = (function(_super) {
 })(VisualTrialObjectView);
 });
 
+;require.register("views/TrialObjectViews/Visual/Text/MultiLineTextVisualTrialObjectView", function(exports, require, module) {
+'use strict';
+var MultiLineTextVisualTrialObjectView, TextVisualTrialObjectView, wrapCanvasText, _ref,
+  __hasProp = {}.hasOwnProperty,
+  __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
+
+TextVisualTrialObjectView = require('../TextVisualTrialObjectView');
+
+wrapCanvasText = require('utils/wrapCanvasText');
+
+module.exports = MultiLineTextVisualTrialObjectView = (function(_super) {
+  __extends(MultiLineTextVisualTrialObjectView, _super);
+
+  function MultiLineTextVisualTrialObjectView() {
+    _ref = MultiLineTextVisualTrialObjectView.__super__.constructor.apply(this, arguments);
+    return _ref;
+  }
+
+  MultiLineTextVisualTrialObjectView.prototype.render = function() {
+    MultiLineTextVisualTrialObjectView.__super__.render.apply(this, arguments);
+    if (this.canvas) {
+      return this.object = wrapCanvasText(this.object, this.canvas, this.model.get("width"), this.model.get("height"), this.model.get("justify"));
+    }
+  };
+
+  return MultiLineTextVisualTrialObjectView;
+
+})(TextVisualTrialObjectView);
+});
+
 ;require.register("views/TrialObjectViews/Visual/TextVisualTrialObjectView", function(exports, require, module) {
 'use strict';
 var Keys, TextVisualTrialObjectView, VisualTrialObjectView, _ref,
@@ -3297,7 +4107,6 @@ module.exports = TextVisualTrialObjectView = (function(_super) {
     } else if ("key" in options) {
       text = Keys.KeysToText[options.key] || options.key;
       if (typeof text === "string" && options.shiftKey) {
-        console.log("True");
         text = text.toUpperCase();
       }
     }
@@ -3355,7 +4164,8 @@ module.exports = VisualTrialObjectView = (function(_super) {
   VisualTrialObjectView.prototype.attach = function(endpoints) {
     this.canvas = endpoints.canvas;
     this.object.setVisible(false);
-    return this.canvas.add(this.object);
+    this.canvas.add(this.object);
+    return this.render();
   };
 
   VisualTrialObjectView.prototype.activate = function() {
@@ -3394,12 +4204,12 @@ module.exports = VisualTrialObjectView = (function(_super) {
 
 ;require.register("views/TrialView", function(exports, require, module) {
 'use strict';
-var Template, TrialView, View, _ref,
+var HandlerView, Template, TrialView, _ref,
   __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
   __hasProp = {}.hasOwnProperty,
   __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; };
 
-View = require('./View');
+HandlerView = require('./HandlerView');
 
 Template = require('templates/trial');
 
@@ -3409,7 +4219,6 @@ module.exports = TrialView = (function(_super) {
   function TrialView() {
     this.registerEvents = __bind(this.registerEvents, this);
     this.registerTimeout = __bind(this.registerTimeout, this);
-    this.logEvent = __bind(this.logEvent, this);
     this.canvasPerformanceTracking = __bind(this.canvasPerformanceTracking, this);
     this.createCanvas = __bind(this.createCanvas, this);
     this.preLoadTrial = __bind(this.preLoadTrial, this);
@@ -3451,29 +4260,58 @@ module.exports = TrialView = (function(_super) {
   };
 
   TrialView.prototype.startTrial = function() {
-    var view, _i, _len, _ref1;
+    var date_time, endpoints, view, _i, _len, _ref1;
+    date_time = new Date().getTime();
+    if (this.datamodel.get("start_time") != null) {
+      this.logEvent("trial_resume", {
+        date_time: date_time
+      });
+    } else {
+      this.datamodel.set("start_time", date_time);
+      this.logEvent("trial_start", {
+        date_time: date_time
+      });
+    }
+    this.datamodel.set("trial_id", this.model.id);
+    this.datamodel.set("parameters", this.model.get("parameters"));
     this.createCanvas();
+    endpoints = {
+      canvas: this.canvas,
+      hidden: this.$("#trial-hidden"),
+      elements: this.$("#trial-elements")
+    };
     _ref1 = this.subViewList;
     for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
       view = _ref1[_i];
-      view.attach({
-        canvas: this.canvas,
-        hidden: this.$("#trial-hidden")
-      });
+      view.attach(endpoints);
       view.datamodel = this.datamodel;
       view.registerEvents(this.subViewList);
     }
     this.registerEvents();
     this.registerTimeout();
-    this.clock.startTimer();
-    return this.logEvent("trial_start");
+    return this.clock.startTimer();
   };
 
   TrialView.prototype.createCanvas = function() {
+    var eventType, _i, _len, _ref1, _results,
+      _this = this;
     this.canvas = new fabric.Canvas("trial-canvas");
     this.canvas.selection = false;
     this.canvas.hoverCursor = 'default';
-    return this.clock.canvas = this.canvas;
+    this.clock.canvas = this.canvas;
+    if (!Modernizr.pointerevents) {
+      _ref1 = ["mousedown", "mouseup"];
+      _results = [];
+      for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
+        eventType = _ref1[_i];
+        _results.push(this.$("#trial-elements")[eventType](function(event) {
+          var target;
+          target = _this.canvas.findTarget(event);
+          return target.trigger(eventType);
+        }));
+      }
+      return _results;
+    }
   };
 
   TrialView.prototype.canvasPerformanceTracking = function(options) {
@@ -3486,15 +4324,6 @@ module.exports = TrialView = (function(_super) {
     });
   };
 
-  TrialView.prototype.logEvent = function(event_type, options) {
-    if (options == null) {
-      options = {};
-    }
-    return this.datamodel.logEvent(event_type, this.clock, _.extend(options, {
-      object: this.model.name()
-    }));
-  };
-
   TrialView.prototype.registerTimeout = function() {
     if (this.model.get("timeout")) {
       return this.clock.delayedTrigger(this.model.get("timeout"), this, this.endTrial);
@@ -3502,18 +4331,20 @@ module.exports = TrialView = (function(_super) {
   };
 
   TrialView.prototype.endTrial = function() {
-    var key, view, _ref1;
-    this.logEvent("trial_end");
+    var date_time, key, view, _ref1;
+    date_time = new Date().getTime();
+    this.logEvent("trial_end", {
+      date_time: date_time
+    });
+    this.datamodel.set("end_time", date_time);
     _ref1 = this.subViews;
     for (key in _ref1) {
       view = _ref1[key];
-      view.deactivate();
       view.remove();
     }
     this.clock.stopTimer();
     delete this.clock.canvas;
     delete this.canvas;
-    this.stopListening();
     this.remove();
     return this.trigger("trialEnded");
   };
@@ -3528,16 +4359,20 @@ module.exports = TrialView = (function(_super) {
       view = _.find(this.subViews, function(subView) {
         return subView.name === trigger.objectName;
       });
-      _results.push(this.listenTo(view, trigger.eventName, function() {
-        return _this[trigger.callback](trigger["arguments"] || {});
-      }));
+      if (view != null) {
+        _results.push(this.listenTo(view, trigger.eventName, function() {
+          return _this[trigger.callback](trigger["arguments"] || {});
+        }));
+      } else {
+        _results.push(console.debug("There is no object with the name\n" + trigger.objectName + " in this trial."));
+      }
     }
     return _results;
   };
 
   return TrialView;
 
-})(View);
+})(HandlerView);
 });
 
 ;require.register("views/View", function(exports, require, module) {
@@ -3560,7 +4395,9 @@ module.exports = View = (function(_super) {
 
   View.prototype.initialize = function(options) {
     View.__super__.initialize.apply(this, arguments);
-    return this.clock = options.clock;
+    this.clock = options != null ? options.clock : void 0;
+    this.user_id = options != null ? options.user_id : void 0;
+    return this.injectedParameters = options != null ? options.parameters : void 0;
   };
 
   View.prototype.template = function() {};
@@ -3581,19 +4418,24 @@ module.exports = View = (function(_super) {
     return $(el).append(this.el);
   };
 
-  View.prototype.instantiateSubViews = function(key, viewType, viewFunction) {
-    var model, _i, _len, _ref1;
+  View.prototype.instantiateSubViews = function(key, viewType, viewFunction, options) {
+    var model, _i, _len, _ref1, _ref2;
+    if (options == null) {
+      options = {};
+    }
     this.subViews = {};
-    _ref1 = this.model.get(key).models;
-    for (_i = 0, _len = _ref1.length; _i < _len; _i++) {
-      model = _ref1[_i];
-      if (viewFunction) {
+    _ref2 = ((_ref1 = this.model) != null ? _ref1.get(key).models : void 0) || [];
+    for (_i = 0, _len = _ref2.length; _i < _len; _i++) {
+      model = _ref2[_i];
+      if (viewFunction != null) {
         viewType = viewFunction(model);
       }
-      this.subViews[model.id] = new PsychoCoffee[viewType]({
+      options = _.extend(options, {
         model: model,
-        clock: this.clock
+        clock: this.clock,
+        user_id: this.user_id
       });
+      this.subViews[model.id] = new PsychoCoffee[viewType](options);
     }
     return this.subViewList = _.values(this.subViews);
   };

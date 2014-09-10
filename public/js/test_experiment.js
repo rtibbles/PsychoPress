@@ -85,8 +85,8 @@ window.test = block1.createTrialObject({
     fontSize: 12,
     fontFamily: "arial",
     fontStyle: "normal",
-    left: 100,
-    top: 100,
+    x: 100,
+    y: 100,
     width: 600,
     height: 100,
     opacity: 0.5,
@@ -97,6 +97,19 @@ window.test = block1.createTrialObject({
             callback: "addText"
         }
     ]
+});
+
+block1.createTrialObject({
+    type: "text-input",
+    placeholder: "Type here!",
+    prompt: "What is your favourite colour?",
+    duration: 10000000,
+    delay: 0,
+    fontSize: 12,
+    fontFamily: "arial",
+    fontStyle: "normal",
+    x: 100,
+    y: 100
 });
 
 // block1.createTrialObject({
@@ -119,8 +132,8 @@ block1.createTrialObject({
     delay: 0,
     name: "circle",
     radius: 25,
-    top: 300,
-    left: 300,
+    y: 300,
+    x: 300,
     fill: "#FF0000"
 });
 
@@ -130,8 +143,8 @@ block1.createTrialObject({
     delay: 0,
     name: "rectangle",
     radius: 25,
-    top: 400,
-    left: 400,
+    y: 400,
+    x: 400,
     height: 100,
     width: 200,
     fill: "#FF0000"
@@ -140,8 +153,8 @@ block1.createTrialObject({
 block1.createTrialObject({
     subModelTypeAttribute: "ImageVisualTrialObject",
     duration: 100000,
-    top: 300,
-    left: 300,
+    y: 300,
+    x: 300,
     delay: 0,
     file: "/images/test.png",
     name: "tux"
@@ -163,8 +176,8 @@ block1.createTrialObject({
 //     fontSize: 16,
 //     fontFamily: "arial",
 //     fontStyle: "normal",
-//     left: 100,
-//     top: 200,
+//     x: 100,
+//     y: 200,
 //     width: 600,
 //     height: 100,
 //     opacity: 0.5,
@@ -183,8 +196,8 @@ block1.createTrialObject({
 //     fontSize: 16,
 //     fontFamily: "arial",
 //     fontStyle: "normal",
-//     left: 100,
-//     top: 300,
+//     x: 100,
+//     y: 300,
 //     width: 600,
 //     height: 100,
 //     opacity: 0.5,
